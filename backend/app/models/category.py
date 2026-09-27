@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String, text
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,10 +26,23 @@ class Category(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "categories"
     __table_args__ = (
         CheckConstraint("parent_id IS NULL OR parent_id != id", name="parent_not_self"),
+        # Uniqueness applies only to live rows, so a deleted category frees its name.
+        Index(
+            "ix_categories_name",
+            "name",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_categories_slug",
+            "slug",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
-    name: Mapped[str] = mapped_column(String(120), unique=True, index=True, nullable=False)
-    slug: Mapped[str] = mapped_column(String(140), unique=True, index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    slug: Mapped[str] = mapped_column(String(140), nullable=False)
     description: Mapped[str | None] = mapped_column(String(255))
     image_url: Mapped[str | None] = mapped_column(String(500))
 

@@ -32,7 +32,7 @@ function SelectFilter({
 }: SelectFilterProps) {
   return (
     <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger className={cn("w-48", className)} aria-label={ariaLabel}>
+      <SelectTrigger className={cn("w-full sm:w-48", className)} aria-label={ariaLabel}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

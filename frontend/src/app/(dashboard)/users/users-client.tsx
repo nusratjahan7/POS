@@ -124,8 +124,8 @@ export function UsersClient() {
       />
 
       <Card>
-        <CardHeader>
-          <div>
+        <CardHeader className="flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+          <div className="shrink-0">
             <CardTitle>Staff accounts</CardTitle>
             <CardDescription>
               {usersQuery.data
@@ -133,7 +133,7 @@ export function UsersClient() {
                 : "Loading accounts"}
             </CardDescription>
           </div>
-          <div className="relative w-full max-w-xs">
+          <div className="relative w-full sm:max-w-xs">
             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
             <Input
               value={search}

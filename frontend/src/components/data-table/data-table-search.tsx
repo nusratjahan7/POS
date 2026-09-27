@@ -22,7 +22,7 @@ function DataTableSearch({
   className,
 }: DataTableSearchProps) {
   return (
-    <div className={cn("relative w-full max-w-xs", className)}>
+    <div className={cn("relative w-full sm:max-w-xs", className)}>
       <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
       <Input
         value={value}

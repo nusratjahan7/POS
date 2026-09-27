@@ -13,7 +13,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ConflictError, NotFoundError, UnprocessableError
 from app.models.product import Product
@@ -54,6 +56,24 @@ class ProductService:
         return await self.products.list_products(params, sort=sort, **filters)
 
     # --- Internals ---------------------------------------------------------
+    async def _reload(self, product_id: uuid.UUID) -> Product:
+        """Re-read a product after a write.
+
+        Two reasons this exists rather than returning the in-memory instance:
+
+        * ``Numeric`` columns come back at their stored scale (``24`` becomes
+          ``24.000``), so the response matches what was persisted;
+        * ``category``/``brand`` are eager-loaded here, so serialising the
+          response never triggers a lazy load outside the greenlet context.
+        """
+        stmt = (
+            select(Product)
+            .where(Product.id == product_id)
+            .options(selectinload(Product.category), selectinload(Product.brand))
+            .execution_options(populate_existing=True)
+        )
+        return (await self.session.execute(stmt)).scalars().one()
+
     async def _unique_slug(self, name: str, *, exclude_id: uuid.UUID | None = None) -> str:
         base = slugify(name, max_length=SLUG_MAX_LENGTH)
         candidate, suffix = base, 2
@@ -144,7 +164,7 @@ class ProductService:
         )
         await self.products.add(product)
         await self.session.commit()
-        return product
+        return await self._reload(product.id)
 
     async def update(self, product_id: uuid.UUID, payload: ProductUpdate) -> Product:
         product = await self.get_or_404(product_id)

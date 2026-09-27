@@ -35,7 +35,10 @@ async def test_create_user(
     assert body["is_superuser"] is False
     assert [role["name"] for role in body["roles"]] == ["Cashier"]
     assert body["branch"]["code"] == seeded.branch.code
-    assert "catalog:read" in body["permissions"]
+    # The role's permissions are surfaced on the created account. Cashiers sell
+    # but no longer carry catalogue access (see test_products_api).
+    assert "sales:create" in body["permissions"]
+    assert "catalog:read" not in body["permissions"]
     assert "users:read" not in body["permissions"]
     assert "hashed_password" not in body
 

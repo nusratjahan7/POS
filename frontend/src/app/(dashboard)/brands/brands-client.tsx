@@ -200,8 +200,8 @@ export function BrandsClient() {
       />
 
       <Card>
-        <CardHeader>
-          <div>
+        <CardHeader className="flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+          <div className="shrink-0">
             <CardTitle>All brands</CardTitle>
             <CardDescription>
               {listQuery.data
@@ -209,12 +209,13 @@ export function BrandsClient() {
                 : "Loading brands"}
             </CardDescription>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:flex sm:min-w-0 sm:flex-nowrap sm:items-center sm:gap-3 sm:overflow-x-auto sm:pb-0.5">
             <DataTableSearch
               value={table.search}
               onValueChange={table.setSearch}
               placeholder="Search brands"
               ariaLabel="Search brands"
+              className="col-span-2"
             />
             <SelectFilter
               value={status}

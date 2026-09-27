@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     ForeignKey,
+    Index,
     Numeric,
     String,
     Text,
@@ -60,12 +61,32 @@ class Product(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
         ),
         CheckConstraint("minimum_stock >= 0", name="minimum_stock_non_negative"),
         CheckConstraint("stock_quantity >= 0", name="stock_quantity_non_negative"),
+        # Uniqueness applies only to live rows: a soft-deleted product must not
+        # reserve its slug/SKU/barcode forever.
+        Index(
+            "ix_products_slug",
+            "slug",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_products_sku",
+            "sku",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_products_barcode",
+            "barcode",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    slug: Mapped[str] = mapped_column(String(220), unique=True, index=True, nullable=False)
-    sku: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
-    barcode: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    slug: Mapped[str] = mapped_column(String(220), nullable=False)
+    sku: Mapped[str] = mapped_column(String(64), nullable=False)
+    barcode: Mapped[str | None] = mapped_column(String(64))
 
     category_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

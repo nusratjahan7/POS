@@ -182,7 +182,6 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.BUSINESS_READ,
                 PermissionCode.REGISTERS_READ,
                 PermissionCode.PAYMENTS_READ,
-                PermissionCode.CATALOG_READ,
                 PermissionCode.INVENTORY_READ,
                 PermissionCode.SALES_CREATE,
                 PermissionCode.SALES_READ,

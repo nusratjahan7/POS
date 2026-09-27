@@ -110,8 +110,8 @@ export function RolesClient() {
       />
 
       <Card>
-        <CardHeader>
-          <div>
+        <CardHeader className="flex-col items-start gap-3 sm:flex-row sm:items-center">
+          <div className="shrink-0">
             <CardTitle>Defined roles</CardTitle>
             <CardDescription>
               System roles are owned by the application and cannot be renamed or deleted.

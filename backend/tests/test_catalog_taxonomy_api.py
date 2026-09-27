@@ -216,6 +216,19 @@ async def test_duplicate_category_name_is_still_rejected(
     assert response.json()["error"]["code"] == "category_name_taken"
 
 
+async def test_a_deleted_category_frees_its_name(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    created = await _create_category(client, auth_headers, name="Seasonal")
+    assert (
+        await client.delete(f"{CATEGORIES}/{created['id']}", headers=auth_headers)
+    ).status_code == 204
+
+    again = await client.post(CATEGORIES, headers=auth_headers, json={"name": "Seasonal"})
+
+    assert again.status_code == 201, again.text
+
+
 # ---------------------------------------------------------------------------
 # Brands
 # ---------------------------------------------------------------------------

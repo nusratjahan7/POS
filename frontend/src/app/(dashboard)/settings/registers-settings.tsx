@@ -131,8 +131,8 @@ export function RegistersSettings() {
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative w-full max-w-xs">
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:min-w-0 sm:flex-nowrap sm:items-center sm:gap-3 sm:overflow-x-auto sm:pb-0.5">
+          <div className="relative col-span-2 w-full sm:max-w-xs">
             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
             <Input
               value={search}
@@ -144,7 +144,7 @@ export function RegistersSettings() {
           </div>
 
           <Select value={branchFilter} onValueChange={setBranchFilter}>
-            <SelectTrigger className="w-52" aria-label="Filter by branch">
+            <SelectTrigger className="w-full sm:w-52" aria-label="Filter by branch">
               <SelectValue placeholder="All branches" />
             </SelectTrigger>
             <SelectContent>

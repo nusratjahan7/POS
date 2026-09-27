@@ -26,19 +26,17 @@ class ProductRepository(BaseRepository[Product]):
     }
 
     async def slug_exists(self, slug: str, *, exclude_id: uuid.UUID | None = None) -> bool:
-        stmt = select(Product.id).where(Product.slug == slug)
-        if exclude_id is not None:
-            stmt = stmt.where(Product.id != exclude_id)
-        return (await self.session.execute(stmt.limit(1))).scalar_one_or_none() is not None
+        return await self._exists(Product.slug == slug, exclude_id=exclude_id)
 
     async def sku_exists(self, sku: str, *, exclude_id: uuid.UUID | None = None) -> bool:
-        stmt = select(Product.id).where(Product.sku == sku)
-        if exclude_id is not None:
-            stmt = stmt.where(Product.id != exclude_id)
-        return (await self.session.execute(stmt.limit(1))).scalar_one_or_none() is not None
+        return await self._exists(Product.sku == sku, exclude_id=exclude_id)
 
     async def barcode_exists(self, barcode: str, *, exclude_id: uuid.UUID | None = None) -> bool:
-        stmt = select(Product.id).where(Product.barcode == barcode)
+        return await self._exists(Product.barcode == barcode, exclude_id=exclude_id)
+
+    async def _exists(self, *conditions: Any, exclude_id: uuid.UUID | None = None) -> bool:
+        """Only live rows count — a soft-deleted product frees its identifiers."""
+        stmt = select(Product.id).where(*conditions, Product.deleted_at.is_(None))
         if exclude_id is not None:
             stmt = stmt.where(Product.id != exclude_id)
         return (await self.session.execute(stmt.limit(1))).scalar_one_or_none() is not None

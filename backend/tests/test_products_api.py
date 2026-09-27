@@ -264,6 +264,24 @@ async def test_unknown_sort_field_is_rejected(
     assert response.json()["error"]["code"] == "invalid_sort_field"
 
 
+async def test_a_deleted_product_frees_its_sku_and_barcode(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Soft delete must not reserve the SKU/barcode forever (partial unique index)."""
+    created = await _create(client, auth_headers, sku="REUSE-1", barcode="555000555")
+    assert (
+        await client.delete(f"{PRODUCTS}/{created['id']}", headers=auth_headers)
+    ).status_code == 204
+
+    again = await client.post(
+        PRODUCTS,
+        headers=auth_headers,
+        json=_product(name="Reused", sku="REUSE-1", barcode="555000555"),
+    )
+
+    assert again.status_code == 201, again.text
+
+
 async def test_unknown_category_is_rejected(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
