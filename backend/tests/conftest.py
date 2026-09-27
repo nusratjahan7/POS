@@ -230,3 +230,49 @@ async def administrator(db_session: AsyncSession, seeded: SimpleNamespace) -> Us
     db_session.add(user)
     await db_session.commit()
     return user
+
+
+MANAGER_ROLE_PASSWORD = "OpsManager1!"
+INVENTORY_PASSWORD = "InventoryRole1!"
+
+
+@pytest.fixture
+async def manager_user(db_session: AsyncSession, seeded: SimpleNamespace) -> User:
+    """A user holding the built-in Manager role: operations, but not roles/settings."""
+    user = User(
+        email="ops-manager@example.com",
+        hashed_password=hash_password(MANAGER_ROLE_PASSWORD),
+        full_name="Test Operations Manager",
+        is_active=True,
+        branch=seeded.branch,
+    )
+    user.roles = [seeded.roles["Manager"]]
+    db_session.add(user)
+    await db_session.commit()
+    return user
+
+
+@pytest.fixture
+async def manager_headers(client: AsyncClient, manager_user: User) -> dict[str, str]:
+    return await _login(client, manager_user.email, MANAGER_ROLE_PASSWORD)
+
+
+@pytest.fixture
+async def inventory_manager(db_session: AsyncSession, seeded: SimpleNamespace) -> User:
+    """A user holding the built-in Inventory Manager role: stock and purchasing only."""
+    user = User(
+        email="inventory@example.com",
+        hashed_password=hash_password(INVENTORY_PASSWORD),
+        full_name="Test Inventory Manager",
+        is_active=True,
+        branch=seeded.branch,
+    )
+    user.roles = [seeded.roles["Inventory Manager"]]
+    db_session.add(user)
+    await db_session.commit()
+    return user
+
+
+@pytest.fixture
+async def inventory_manager_headers(client: AsyncClient, inventory_manager: User) -> dict[str, str]:
+    return await _login(client, inventory_manager.email, INVENTORY_PASSWORD)

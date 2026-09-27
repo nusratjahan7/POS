@@ -33,6 +33,10 @@ class PermissionCode(StrEnum):
     INVENTORY_READ = "inventory:read"
     INVENTORY_ADJUST = "inventory:adjust"
 
+    # Purchasing (supplier orders and goods received)
+    PURCHASES_VIEW = "purchases:view"
+    PURCHASES_CREATE = "purchases:create"
+
     # Selling
     SALES_CREATE = "sales:create"
     SALES_READ = "sales:read"
@@ -45,6 +49,9 @@ class PermissionCode(StrEnum):
 
     # Insight
     REPORTS_VIEW = "reports:view"
+
+    # Platform administration
+    SETTINGS_MANAGE = "settings:manage"
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +81,8 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.CATALOG_DELETE, "Delete products and categories"),
     PermissionSpec(PermissionCode.INVENTORY_READ, "View stock levels"),
     PermissionSpec(PermissionCode.INVENTORY_ADJUST, "Adjust and transfer stock"),
+    PermissionSpec(PermissionCode.PURCHASES_VIEW, "View purchase orders and receipts"),
+    PermissionSpec(PermissionCode.PURCHASES_CREATE, "Raise purchase orders and receive goods"),
     PermissionSpec(PermissionCode.SALES_CREATE, "Ring up sales"),
     PermissionSpec(PermissionCode.SALES_READ, "View sales history"),
     PermissionSpec(PermissionCode.SALES_VOID, "Void sales"),
@@ -81,6 +90,7 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.CUSTOMERS_READ, "View customers"),
     PermissionSpec(PermissionCode.CUSTOMERS_WRITE, "Create and edit customers"),
     PermissionSpec(PermissionCode.REPORTS_VIEW, "View reports and analytics"),
+    PermissionSpec(PermissionCode.SETTINGS_MANAGE, "Manage organisation-wide settings"),
 )
 
 ALL_PERMISSION_CODES: frozenset[str] = frozenset(spec.code.value for spec in PERMISSIONS)
@@ -114,12 +124,29 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.CATALOG_WRITE,
                 PermissionCode.INVENTORY_READ,
                 PermissionCode.INVENTORY_ADJUST,
+                PermissionCode.PURCHASES_VIEW,
+                PermissionCode.PURCHASES_CREATE,
                 PermissionCode.SALES_CREATE,
                 PermissionCode.SALES_READ,
                 PermissionCode.SALES_VOID,
                 PermissionCode.SALES_REFUND,
                 PermissionCode.CUSTOMERS_READ,
                 PermissionCode.CUSTOMERS_WRITE,
+                PermissionCode.REPORTS_VIEW,
+            }
+        ),
+    ),
+    RoleSpec(
+        name="Inventory Manager",
+        description="Owns stock levels and supplier orders; no access to selling or staff.",
+        permissions=frozenset(
+            {
+                PermissionCode.BRANCHES_READ,
+                PermissionCode.CATALOG_READ,
+                PermissionCode.INVENTORY_READ,
+                PermissionCode.INVENTORY_ADJUST,
+                PermissionCode.PURCHASES_VIEW,
+                PermissionCode.PURCHASES_CREATE,
                 PermissionCode.REPORTS_VIEW,
             }
         ),

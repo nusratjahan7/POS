@@ -1,9 +1,12 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useAuth } from "@/components/auth/auth-provider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { hasPermission } from "@/lib/auth/permissions";
 import { navGroups, type NavItem } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
@@ -45,9 +48,7 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
             )}
           </button>
         </TooltipTrigger>
-        <TooltipContent side={collapsed ? "right" : "right"}>
-          {item.title} — ships in a later module
-        </TooltipContent>
+        <TooltipContent side="right">{item.title} — ships in a later module</TooltipContent>
       </Tooltip>
     );
   }
@@ -68,7 +69,11 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
       )}
     >
       <Icon className="size-4 shrink-0" aria-hidden />
-      {collapsed ? <span className="sr-only">{item.title}</span> : <span className="truncate">{item.title}</span>}
+      {collapsed ? (
+        <span className="sr-only">{item.title}</span>
+      ) : (
+        <span className="truncate">{item.title}</span>
+      )}
     </Link>
   );
 }
@@ -80,13 +85,29 @@ function SidebarNav({
   collapsed?: boolean;
   onNavigate?: () => void;
 }) {
+  const { user } = useAuth();
+
+  // Each entry declares the permission it needs; groups that end up empty vanish.
+  const visibleGroups = React.useMemo(
+    () =>
+      navGroups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter(
+            (item) => !item.permission || hasPermission(user, item.permission),
+          ),
+        }))
+        .filter((group) => group.items.length > 0),
+    [user],
+  );
+
   return (
     <nav
       aria-label="Primary"
       className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4"
       onClick={onNavigate}
     >
-      {navGroups.map((group) => (
+      {visibleGroups.map((group) => (
         <div key={group.label} className="flex flex-col gap-1">
           {collapsed ? (
             <div className="bg-sidebar-border mx-auto mb-1.5 h-px w-6" aria-hidden />
@@ -100,6 +121,12 @@ function SidebarNav({
           ))}
         </div>
       ))}
+
+      {visibleGroups.length === 0 ? (
+        <p className="text-sidebar-foreground/50 px-2.5 text-xs">
+          No modules are available for your role.
+        </p>
+      ) : null}
     </nav>
   );
 }

@@ -33,7 +33,8 @@ const foundations = [
   { label: "Application shell", state: "ready" },
   { label: "REST API at /api/v1", state: "ready" },
   { label: "Database & migrations", state: "ready" },
-  { label: "Authentication module", state: "planned" },
+  { label: "Authentication", state: "ready" },
+  { label: "Users, roles & permissions", state: "ready" },
   { label: "Sales & inventory", state: "planned" },
 ] as const;
 

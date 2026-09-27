@@ -39,6 +39,12 @@ export class ApiError extends Error {
   }
 }
 
+/** Uniform user-facing text for anything thrown by the API client. */
+export function describeError(cause: unknown): string {
+  if (cause instanceof ApiError) return cause.message;
+  return "Could not reach the server. Check your connection and try again.";
+}
+
 export type RefreshedSession = {
   access_token: string;
   expires_in: number;

@@ -10,6 +10,8 @@ type ErrorStateProps = React.ComponentProps<"div"> & {
   /** Rendered under the description — wire this to `error.digest` in dev. */
   detail?: string;
   size?: "default" | "compact";
+  /** Override the glyph, e.g. a shield for an authorization refusal. */
+  icon?: React.ComponentType<{ className?: string }>;
 };
 
 function ErrorState({
@@ -18,6 +20,7 @@ function ErrorState({
   action,
   detail,
   size = "default",
+  icon: Icon = AlertTriangle,
   className,
   ...props
 }: ErrorStateProps) {
@@ -39,7 +42,7 @@ function ErrorState({
           size === "default" ? "size-11" : "size-9",
         )}
       >
-        <AlertTriangle className={size === "default" ? "size-5" : "size-4"} aria-hidden />
+        <Icon className={size === "default" ? "size-5" : "size-4"} aria-hidden />
       </div>
 
       <div className="flex flex-col gap-1">

@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
 type FieldProps = {
   label: string;
   htmlFor: string;
-  error?: string;
+  /** Accepts `null` so callers can pass raw state without coercing it. */
+  error?: string | null;
   hint?: string;
   /** Rendered opposite the label, e.g. a "Forgot password?" link. */
   action?: React.ReactNode;
