@@ -6,6 +6,8 @@ predictable name — required for reliable Alembic autogenerate and rollbacks.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
 
@@ -20,3 +22,12 @@ NAMING_CONVENTION = {
 
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+    # Fetch server-generated values (notably `updated_at`, whose `onupdate` is a
+    # SQL expression) with RETURNING as part of the INSERT/UPDATE.
+    #
+    # Without this the ORM expires those attributes after a flush, because it
+    # cannot know the value the database computed. Reading them afterwards
+    # becomes a lazy load — which raises MissingGreenlet the moment a response
+    # model serialises the instance outside an await.
+    __mapper_args__: ClassVar[dict[str, bool]] = {"eager_defaults": True}

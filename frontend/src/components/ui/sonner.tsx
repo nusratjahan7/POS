@@ -8,6 +8,9 @@ import { Toaster as Sonner, type ToasterProps } from "sonner";
  * Toast surface. Reads the active theme so notifications match the app in both
  * light and dark mode, and inherits the design tokens rather than sonner's
  * defaults.
+ *
+ * Positioned top-right; the offset clears the 56px sticky app header so a toast
+ * sits below it rather than on top of it.
  */
 function Toaster(props: ToasterProps) {
   const { resolvedTheme } = useTheme();
@@ -15,7 +18,8 @@ function Toaster(props: ToasterProps) {
   return (
     <Sonner
       theme={(resolvedTheme as ToasterProps["theme"]) ?? "system"}
-      position="bottom-right"
+      position="top-right"
+      offset={{ top: 72, right: 16 }}
       closeButton
       className="toaster group"
       style={

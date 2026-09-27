@@ -11,6 +11,7 @@ from app.models.user import User
 
 ROLES = "/api/v1/roles"
 PERMISSIONS_URL = "/api/v1/permissions"
+USERS = "/api/v1/users"
 
 
 async def test_list_roles_includes_seeded_roles(
@@ -100,9 +101,24 @@ async def test_system_role_permissions_can_be_updated(
 
 
 async def test_role_in_use_cannot_be_deleted(
-    client: AsyncClient, auth_headers: dict[str, str], seeded: SimpleNamespace, cashier: User
+    client: AsyncClient, auth_headers: dict[str, str], cashier: User
 ) -> None:
-    role_id = seeded.roles["Cashier"].id
+    """A deletable role still assigned to someone is blocked by the referential guard.
+
+    System roles are protected earlier and rejected with 403, so this exercises
+    the `role_in_use` branch using a custom role that would otherwise be deletable.
+    """
+    created = await client.post(
+        ROLES, headers=auth_headers, json={"name": "Shift Lead", "permission_codes": []}
+    )
+    assert created.status_code == 201
+    role_id = created.json()["id"]
+
+    assigned = await client.patch(
+        f"{USERS}/{cashier.id}", headers=auth_headers, json={"role_ids": [role_id]}
+    )
+    assert assigned.status_code == 200
+
     response = await client.delete(f"{ROLES}/{role_id}", headers=auth_headers)
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "role_in_use"

@@ -10,10 +10,13 @@ from app.api.cookies import clear_refresh_cookie, set_refresh_cookie
 from app.api.deps import CurrentUser, SessionDep, client_ip, rate_limit
 from app.core.config import settings
 from app.core.exceptions import UnauthorizedError
+from app.core.notifications import notifier
 from app.schemas.auth import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     RefreshRequest,
+    ResetPasswordRequest,
     TokenResponse,
 )
 from app.schemas.common import Message
@@ -112,3 +115,50 @@ async def change_password(
     # All sessions were revoked; drop the cookie so the client re-authenticates.
     clear_refresh_cookie(response)
     return Message(message="Password updated. Please sign in again.")
+
+
+@router.post(
+    "/forgot-password",
+    response_model=Message,
+    summary="Request a password reset link",
+    dependencies=[Depends(rate_limit("forgot-password", "5/hour"))],
+)
+async def forgot_password(
+    request: Request,
+    session: SessionDep,
+    payload: ForgotPasswordRequest,
+) -> Message:
+    issued = await AuthService(session).request_password_reset(
+        email=str(payload.email),
+        ip_address=client_ip(request),
+    )
+    if issued is not None:
+        notifier.send_password_reset(
+            user=issued.user,
+            reset_url=settings.password_reset_url(issued.token),
+            expires_at=issued.expires_at,
+        )
+    # Deliberately identical whether or not the account exists.
+    return Message(
+        message="If an account exists for that email, a password reset link has been sent."
+    )
+
+
+@router.post(
+    "/reset-password",
+    response_model=Message,
+    summary="Set a new password using a reset token",
+    dependencies=[Depends(rate_limit("reset-password", "10/hour"))],
+)
+async def reset_password(
+    response: Response,
+    session: SessionDep,
+    payload: ResetPasswordRequest,
+) -> Message:
+    await AuthService(session).reset_password(
+        token=payload.token,
+        new_password=payload.new_password,
+    )
+    # Every session was revoked; drop the cookie so the client signs in again.
+    clear_refresh_cookie(response)
+    return Message(message="Password updated. Please sign in.")

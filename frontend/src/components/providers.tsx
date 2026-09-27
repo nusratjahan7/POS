@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { AuthProvider } from "@/components/auth/auth-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -16,8 +17,10 @@ function Providers({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange
     >
       <TooltipProvider>
-        {children}
-        <Toaster />
+        <AuthProvider>
+          {children}
+          <Toaster />
+        </AuthProvider>
       </TooltipProvider>
     </ThemeProvider>
   );

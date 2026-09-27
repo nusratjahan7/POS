@@ -8,3 +8,11 @@
 - Values: clean spacing, strong typography, subtle borders, excellent table styling, a professional sidebar, compact-but-readable controls, and polished hover/focus states with responsive behavior. Confidence: 0.75
 - Expects the agent to verify deliverables end-to-end (services start, DB connects, migrations run, health endpoints respond) rather than just writing code. Confidence: 0.7
 - Wants a final report covering created files, commands to run the project, and any assumptions made. Confidence: 0.65
+- Delivers work module-by-module and explicitly wants each new module to reuse the existing architecture rather than rewrite the foundation ("Use the existing project architecture. Do not rewrite the foundation."). Confidence: 0.8
+- Expects production-hardened security by default: never store plain-text passwords, never expose password hashes, do not store sensitive tokens insecurely, protect endpoints, and handle expired tokens / refresh failures gracefully. Confidence: 0.8
+- Expects polished form UX: password visibility toggle, proper validation, clear error messages, loading buttons, success/error toasts, and responsive layout. Confidence: 0.75
+- Prefers toast/notification surfaces positioned top-right rather than the library default. Confidence: 0.6
+- Wants explicit test coverage of both the happy path and failure modes (e.g. invalid login, expired token, refresh, logout, reset flows, protected endpoints). Confidence: 0.75
+- Practices scoping discipline: does not want future modules' features built early (e.g. no roles/permissions yet), but does want the data model prepared so the next module can extend it cleanly. Confidence: 0.75
+- Runs provided terminal commands himself in his own PowerShell and reports failures by pasting the full, raw error/stack trace verbatim rather than summarizing — so expect and parse untrimmed output. Confidence: 0.65
+- Pragmatic about local/dev security tradeoffs: willing to authorize the agent to make invasive-but-reversible system/config changes to unblock progress (e.g. temporarily flipping PostgreSQL loopback auth to `trust`, then restoring it), preferring an unblocking path over strict caution on a dev machine. Confidence: 0.55

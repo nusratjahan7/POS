@@ -39,3 +39,19 @@ class ChangePasswordRequest(BaseModel):
     @classmethod
     def _check_password(cls, value: str) -> str:
         return validate_password_strength(value)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    # Opaque token from the emailed link. Bounds are defensive: real tokens are
+    # 43 chars, so anything far outside that range is rejected before hashing.
+    token: str = Field(min_length=16, max_length=512)
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _check_password(cls, value: str) -> str:
+        return validate_password_strength(value)
