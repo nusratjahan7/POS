@@ -21,10 +21,10 @@ from app.models.customer import Customer
 from app.models.customer_payment import CustomerPayment
 from app.repositories.customer import CustomerRepository
 from app.repositories.customer_payment import CustomerPaymentRepository
+from app.repositories.sale import SaleRepository
 from app.schemas.customer import CustomerCreate, CustomerPaymentCreate, CustomerUpdate
 from app.utils.pagination import PageParams
 
-ZERO = Decimal("0")
 RECENT_LIMIT = 5
 
 
@@ -33,6 +33,7 @@ class CustomerService:
         self.session = session
         self.customers = CustomerRepository(session)
         self.payments = CustomerPaymentRepository(session)
+        self.sales = SaleRepository(session)
 
     # --- Reads -------------------------------------------------------------
     async def get_or_404(self, customer_id: uuid.UUID) -> Customer:
@@ -63,23 +64,30 @@ class CustomerService:
         return await self.payments.list_for_customer(params, customer_id)
 
     async def details(self, customer_id: uuid.UUID) -> dict[str, Any]:
-        """Aggregates for the detail screen.
-
-        ``total_orders``/``total_purchase_amount``/``recent_purchases`` are 0/[  ]
-        until the sales module exists — the shape is final, only the data is
-        pending.
-        """
+        """Aggregates for the detail screen: orders, spend, dues and history."""
         customer = await self.get_or_404(customer_id)
+        total_orders, total_purchase_amount = await self.sales.totals_for_customer(customer.id)
         total_paid = await self.payments.total_for_customer(customer.id)
         recent = await self.payments.recent_for_customer(customer.id, limit=RECENT_LIMIT)
+        recent_purchases = await self.sales.recent_for_customer(customer.id, limit=RECENT_LIMIT)
         return {
             "customer": customer,
-            "total_orders": 0,
-            "total_purchase_amount": ZERO,
+            "total_orders": total_orders,
+            "total_purchase_amount": total_purchase_amount,
             "total_paid": total_paid,
             "outstanding_due": customer.balance,
             "recent_payments": recent,
-            "recent_purchases": [],
+            "recent_purchases": [
+                {
+                    "id": sale.id,
+                    "reference": sale.sale_number,
+                    "purchased_at": sale.sold_at,
+                    "total": sale.total,
+                    "paid": sale.paid,
+                    "due": sale.due,
+                }
+                for sale in recent_purchases
+            ],
         }
 
     # --- Commands ----------------------------------------------------------
@@ -158,18 +166,12 @@ class CustomerService:
         await self.session.commit()
         return await self._reload_payment(payment.id)
 
-    async def charge_credit(
-        self,
-        customer_id: uuid.UUID,
-        amount: Decimal,
-        *,
-        reference: str | None = None,
-        note: str | None = None,
-    ) -> None:
-        """Add a credit sale to the customer's account.
+    async def charge_credit(self, customer_id: uuid.UUID, amount: Decimal) -> None:
+        """Add a sale made on account to the customer's receivable.
 
-        Not exposed over HTTP yet — the sales module will call this when it takes
-        payment on account. Kept here so credit sales land through one code path.
+        Deliberately does **not** commit: the sales module calls this inside its
+        own transaction, so the balance moves with the sale that created it and
+        rolls back with it if anything else fails.
         """
         if amount <= 0:
             raise UnprocessableError(
@@ -181,7 +183,6 @@ class CustomerService:
             .where(Customer.id == customer_id)
             .values(balance=Customer.balance + amount)
         )
-        await self.session.commit()
 
     # --- Internals ---------------------------------------------------------
     async def _reload_payment(self, payment_id: uuid.UUID) -> CustomerPayment:

@@ -91,7 +91,7 @@ export function PosCart({
                   </Button>
                 </div>
 
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <div className="flex items-center gap-1">
                     <Button
                       variant="outline"
@@ -120,11 +120,11 @@ export function PosCart({
                     </Button>
                   </div>
 
-                  <span className="text-muted-foreground text-xs tabular-nums">
+                  <span className="text-muted-foreground min-w-0 truncate text-xs tabular-nums">
                     {formatMoney(line.unitPrice, currency)} × {formatQuantity(line.quantity)}
                   </span>
 
-                  <span className="w-20 text-right text-sm font-medium tabular-nums">
+                  <span className="ml-auto w-20 shrink-0 text-right text-sm font-medium tabular-nums">
                     {formatMoney(line.unitPrice * line.quantity - line.discount, currency)}
                   </span>
                 </div>

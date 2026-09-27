@@ -70,6 +70,10 @@ export type PaymentMethodOption = {
   name: string;
   code: string;
   kind: PaymentKind;
+  /** Cash is counted into the drawer, and change can be given on it. */
+  opens_cash_drawer: boolean;
+  /** The till must capture a transaction reference before tendering. */
+  requires_reference: boolean;
 };
 
 export type PaymentMethod = {

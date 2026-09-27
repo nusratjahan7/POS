@@ -62,3 +62,7 @@ class PaymentMethodSummary(ORMModel):
     name: str
     code: str
     kind: str
+    #: The till needs these to prompt correctly before tendering: whether to ask
+    #: for a transaction reference, and whether the drawer should open.
+    opens_cash_drawer: bool
+    requires_reference: bool

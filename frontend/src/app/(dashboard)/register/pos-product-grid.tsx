@@ -99,7 +99,10 @@ export function PosProductGrid({
             variant="outline"
             onClick={() => onAdd(product)}
             className={cn(
-              "flex h-auto flex-col items-stretch gap-0 rounded-lg p-0 text-left font-normal",
+              "flex h-auto flex-col items-stretch gap-0 overflow-hidden rounded-lg p-0 text-left font-normal",
+              // The button primitive sets `whitespace-nowrap`; a product card must
+              // wrap and shrink instead, or long prices push text out of the card.
+              "whitespace-normal",
               "transition-transform duration-150 active:scale-[0.98]",
               (out || atLimit) && "opacity-70",
             )}
@@ -128,23 +131,23 @@ export function PosProductGrid({
               ) : null}
             </div>
 
-            <div className="flex flex-1 flex-col gap-1 p-2.5">
-              <span className="line-clamp-2 text-sm leading-snug font-medium">{product.name}</span>
+            <div className="flex min-w-0 flex-1 flex-col gap-1 p-2 sm:p-2.5">
+              <span className="line-clamp-2 text-sm leading-snug font-medium break-words">
+                {product.name}
+              </span>
               <span className="text-muted-foreground truncate font-mono text-[0.6875rem]">
                 {product.sku}
               </span>
-              <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-sm font-semibold tabular-nums">
-                    {formatMoney(price, currency)}
+              <div className="mt-auto flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 pt-1">
+                <span className="text-sm font-semibold tabular-nums">
+                  {formatMoney(price, currency)}
+                </span>
+                {onSale ? (
+                  <span className="text-muted-foreground truncate text-xs line-through tabular-nums">
+                    {formatMoney(product.selling_price, currency)}
                   </span>
-                  {onSale ? (
-                    <span className="text-muted-foreground text-xs line-through tabular-nums">
-                      {formatMoney(product.selling_price, currency)}
-                    </span>
-                  ) : null}
-                </div>
-                <span className="text-muted-foreground text-xs tabular-nums">
+                ) : null}
+                <span className="text-muted-foreground ml-auto text-xs tabular-nums">
                   {formatQuantity(product.stock_quantity)}
                 </span>
               </div>

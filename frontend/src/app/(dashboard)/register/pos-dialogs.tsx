@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Clock, Percent, Receipt, ShoppingBag } from "lucide-react";
+import { Clock, Percent } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import type { CartTotals, HeldCart, PosCustomer } from "@/lib/pos/cart-store";
+import type { HeldCart } from "@/lib/pos/cart-store";
 import { formatMoney, formatQuantity } from "@/lib/format";
 
 // --- Order discount --------------------------------------------------------
@@ -219,70 +219,3 @@ export function PosHeldListDialog({
   );
 }
 
-// --- Checkout (Module 11) --------------------------------------------------
-export function PosCheckoutDialog({
-  totals,
-  customer,
-  currency,
-  onClose,
-}: {
-  totals: CartTotals;
-  customer: PosCustomer | null;
-  currency: string;
-  onClose: () => void;
-}) {
-  return (
-    <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Ready to check out</DialogTitle>
-          <DialogDescription>
-            Payment and finalising the sale arrive in Module 11. Nothing has been saved yet.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex flex-col gap-2 rounded-md border p-3 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Customer</span>
-            <span>{customer ? customer.name : "Walk-in"}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Items</span>
-            <span className="tabular-nums">{formatQuantity(totals.itemCount)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Subtotal</span>
-            <span className="tabular-nums">{formatMoney(totals.subtotal, currency)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Discount</span>
-            <span className="tabular-nums">{formatMoney(totals.discountTotal, currency)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Tax</span>
-            <span className="tabular-nums">{formatMoney(totals.tax, currency)}</span>
-          </div>
-          <div className="flex items-center justify-between border-t pt-2 text-base font-semibold">
-            <span>Grand total</span>
-            <span className="tabular-nums">{formatMoney(totals.total, currency)}</span>
-          </div>
-        </div>
-
-        <div className="text-muted-foreground flex items-start gap-2 text-xs">
-          <ShoppingBag className="mt-px size-3.5 shrink-0" aria-hidden />
-          The cart is kept in this browser, so you can keep scanning without losing it.
-        </div>
-
-        <DialogFooter>
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Continue selling
-          </Button>
-          <Button type="button" disabled>
-            <Receipt className="size-4" />
-            Take payment (Module 11)
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}

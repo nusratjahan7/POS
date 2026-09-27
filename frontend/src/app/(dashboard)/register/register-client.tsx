@@ -1,18 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Search, ShieldAlert, Volume2, VolumeX } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Printer, Search, ShieldAlert, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 
 import { PosCart } from "@/app/(dashboard)/register/pos-cart";
-import {
-  PosCheckoutDialog,
-  PosDiscountDialog,
-  PosHeldListDialog,
-  PosHoldDialog,
-} from "@/app/(dashboard)/register/pos-dialogs";
+import { PosDiscountDialog, PosHeldListDialog, PosHoldDialog } from "@/app/(dashboard)/register/pos-dialogs";
 import { PosCustomerDialog } from "@/app/(dashboard)/register/pos-customer-dialog";
+import { PosPaymentDialog } from "@/app/(dashboard)/register/pos-payment-dialog";
 import { PosProductGrid } from "@/app/(dashboard)/register/pos-product-grid";
 import { useCan } from "@/components/auth/can";
 import { Button } from "@/components/ui/button";
@@ -28,18 +24,22 @@ import {
 } from "@/components/ui/select";
 import { posApi, type PosProduct } from "@/lib/api/pos";
 import { branchesApi } from "@/lib/api/rbac";
+import { salesApi, type Sale } from "@/lib/api/sales";
 import { businessApi } from "@/lib/api/settings";
+import { describeError } from "@/lib/api/client";
 import { computeTotals, useCartStore, type SyncResult } from "@/lib/pos/cart-store";
 import { usePosSettings } from "@/lib/pos/settings-store";
+import { printReceipt } from "@/lib/pos/receipt";
 import {
   configureSound,
   initAudio,
   playRemove,
+  playSaleComplete,
   playScanBeep,
   playWarning,
   preloadSounds,
 } from "@/lib/pos/sounds";
-import { formatQuantity } from "@/lib/format";
+import { formatMoney, formatQuantity } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const ALL = "all";
@@ -114,6 +114,9 @@ export function RegisterClient() {
   const [holdOpen, setHoldOpen] = React.useState(false);
   const [heldOpen, setHeldOpen] = React.useState(false);
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
+  const [lastSale, setLastSale] = React.useState<Sale | null>(null);
+
+  const queryClient = useQueryClient();
 
   // Fast, cashier-friendly debounce.
   React.useEffect(() => {
@@ -267,6 +270,28 @@ export function RegisterClient() {
       else toast.warning(`${item.name} was reduced to ${formatQuantity(item.to)}.`);
     }
     setCheckoutOpen(true);
+  }
+
+  /** The sale is committed: this is where the kaching belongs. */
+  function handleSaleComplete(sale: Sale) {
+    playSaleComplete();
+    setLastSale(sale);
+    clear();
+    void queryClient.invalidateQueries({ queryKey: ["pos", "catalog"] });
+    void queryClient.invalidateQueries({ queryKey: ["pos", "categories"] });
+    void queryClient.invalidateQueries({ queryKey: ["customers"] });
+  }
+
+  async function printLastReceipt() {
+    if (!lastSale) return;
+    try {
+      const receipt = await salesApi.receipt(lastSale.id);
+      if (!printReceipt(receipt)) {
+        toast.error("Your browser blocked the receipt window. Allow pop-ups and try again.");
+      }
+    } catch (cause) {
+      toast.error(describeError(cause));
+    }
   }
 
   function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -456,6 +481,27 @@ export function RegisterClient() {
 
       {/* Right: cart */}
       <aside className="flex w-full shrink-0 flex-col border-t bg-card lg:w-[380px] lg:border-t-0 lg:border-l">
+        {lastSale ? (
+          <div className="bg-muted/50 flex items-center justify-between gap-2 border-b px-4 py-2 text-xs">
+            <span className="truncate">
+              Last sale <span className="font-mono font-semibold">{lastSale.sale_number}</span>
+              {Number(lastSale.change_amount) > 0
+                ? ` · change ${formatMoney(lastSale.change_amount, currency)}`
+                : ""}
+              {Number(lastSale.due) > 0 ? ` · due ${formatMoney(lastSale.due, currency)}` : ""}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="shrink-0"
+              onClick={() => void printLastReceipt()}
+            >
+              <Printer className="size-3.5" />
+              Receipt
+            </Button>
+          </div>
+        ) : null}
         <PosCart
           lines={lines}
           customer={customer}
@@ -512,11 +558,15 @@ export function RegisterClient() {
       ) : null}
 
       {checkoutOpen ? (
-        <PosCheckoutDialog
+        <PosPaymentDialog
+          lines={lines}
           totals={totals}
+          orderDiscount={orderDiscount}
           customer={customer}
+          branchId={effectiveBranch}
           currency={currency}
           onClose={() => setCheckoutOpen(false)}
+          onComplete={handleSaleComplete}
         />
       ) : null}
     </div>

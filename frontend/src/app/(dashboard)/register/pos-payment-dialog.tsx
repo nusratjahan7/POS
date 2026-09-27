@@ -1,0 +1,443 @@
+"use client";
+
+import * as React from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { CheckCircle2, CircleAlert, Plus, Printer, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { describeError } from "@/lib/api/client";
+import { salesApi, type Sale } from "@/lib/api/sales";
+import { paymentMethodsApi, type PaymentMethodOption } from "@/lib/api/settings";
+import type { CartLine, CartTotals, PosCustomer } from "@/lib/pos/cart-store";
+import { printReceipt } from "@/lib/pos/receipt";
+import { formatMoney, formatQuantity } from "@/lib/format";
+
+/** One tender line: which method, how much of the sale it settles, and its detail. */
+type Tender = {
+  key: string;
+  methodId: string;
+  amount: string;
+  received: string;
+  reference: string;
+};
+
+let tenderSeq = 0;
+
+function nextTenderKey(): string {
+  tenderSeq += 1;
+  return `tender-${tenderSeq}`;
+}
+
+const money = (value: number, currency: string) => formatMoney(value, currency);
+
+export function PosPaymentDialog({
+  lines,
+  totals,
+  orderDiscount,
+  customer,
+  branchId,
+  currency,
+  onClose,
+  onComplete,
+}: {
+  lines: readonly CartLine[];
+  totals: CartTotals;
+  orderDiscount: number;
+  customer: PosCustomer | null;
+  branchId: string;
+  currency: string;
+  onClose: () => void;
+  onComplete: (sale: Sale) => void;
+}) {
+  const methodsQuery = useQuery({
+    queryKey: ["payment-methods", "options"],
+    queryFn: () => paymentMethodsApi.options(),
+  });
+  const methods = React.useMemo(() => methodsQuery.data ?? [], [methodsQuery.data]);
+
+  const [tenders, setTenders] = React.useState<Tender[]>([]);
+  const [note, setNote] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [completed, setCompleted] = React.useState<Sale | null>(null);
+  const [printing, setPrinting] = React.useState(false);
+
+  const methodById = React.useMemo(() => {
+    const map = new Map<string, PaymentMethodOption>();
+    for (const method of methods) map.set(method.id, method);
+    return map;
+  }, [methods]);
+
+  // Before the cashier touches anything, the whole total sits on the default
+  // method. Derived rather than stored, so it follows the total and needs no
+  // effect to keep in step.
+  const defaultTender = React.useMemo<Tender | null>(() => {
+    if (methods.length === 0) return null;
+    const preferred = methods.find((method) => method.kind === "cash") ?? methods[0];
+    return {
+      key: "default",
+      methodId: preferred.id,
+      amount: totals.total.toFixed(2),
+      received: totals.total.toFixed(2),
+      reference: "",
+    };
+  }, [methods, totals.total]);
+
+  const shown = tenders.length > 0 ? tenders : defaultTender ? [defaultTender] : [];
+
+  const applied = shown.reduce((sum, tender) => sum + (Number(tender.amount) || 0), 0);
+  const change = shown.reduce((sum, tender) => {
+    const amount = Number(tender.amount) || 0;
+    const received = Number(tender.received) || 0;
+    return sum + Math.max(received - amount, 0);
+  }, 0);
+  const due = Math.max(totals.total - applied, 0);
+  const overpaid = Math.max(applied - totals.total, 0);
+
+  const missingReference = shown.find((tender) => {
+    const method = methodById.get(tender.methodId);
+    return Boolean(method?.requires_reference) && !tender.reference.trim();
+  });
+
+  const blocking =
+    shown.length === 0 || applied <= 0
+      ? "Enter how the customer is paying."
+      : overpaid > 0
+        ? `That is ${money(overpaid, currency)} more than the total — record the extra as the amount received.`
+        : due > 0 && !customer
+          ? `${money(due, currency)} would be left unpaid. Choose a customer to carry it, or take the full amount.`
+          : missingReference
+            ? `${methodById.get(missingReference.methodId)?.name ?? "That method"} needs a reference.`
+            : null;
+
+  function updateTender(key: string, patch: Partial<Tender>) {
+    setTenders(
+      shown.map((tender) => (tender.key === key ? { ...tender, ...patch } : tender)),
+    );
+  }
+
+  function addTender() {
+    const fallback =
+      methods.find((method) => method.kind === "card") ?? methods[1] ?? methods[0];
+    if (!fallback) return;
+    const key = nextTenderKey();
+    setTenders([
+      ...shown,
+      {
+        key,
+        methodId: fallback.id,
+        amount: (due > 0 ? due : 0).toFixed(2),
+        received: "",
+        reference: "",
+      },
+    ]);
+  }
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      salesApi.create({
+        branch_id: branchId,
+        customer_id: customer?.id ?? null,
+        note: note.trim() || null,
+        order_discount: orderDiscount.toFixed(2),
+        items: lines.map((line) => ({
+          product_id: line.productId,
+          quantity: String(line.quantity),
+          discount: line.discount.toFixed(2),
+        })),
+        payments: shown.map((tender) => {
+          const method = methodById.get(tender.methodId);
+          const amount = Number(tender.amount) || 0;
+          const received = Number(tender.received) || 0;
+          return {
+            payment_method_id: tender.methodId,
+            amount: amount.toFixed(2),
+            // Only cash can give change, and only when there is change to give.
+            tendered:
+              method?.kind === "cash" && received > amount ? received.toFixed(2) : null,
+            reference: tender.reference.trim() || null,
+          };
+        }),
+      }),
+    onSuccess: (sale) => {
+      setCompleted(sale);
+      onComplete(sale);
+    },
+    onError: (cause: unknown) => {
+      const message = describeError(cause);
+      setError(message);
+      toast.error(message);
+    },
+  });
+
+  async function handlePrint() {
+    if (!completed) return;
+    setPrinting(true);
+    try {
+      const receipt = await salesApi.receipt(completed.id);
+      if (!printReceipt(receipt)) {
+        toast.error("Your browser blocked the receipt window. Allow pop-ups and try again.");
+      }
+    } catch (cause) {
+      toast.error(describeError(cause));
+    } finally {
+      setPrinting(false);
+    }
+  }
+
+  // --- Success: the sale is committed, the invoice number stays on screen -----
+  if (completed) {
+    return (
+      <Dialog open onOpenChange={(next) => !next && onClose()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="text-success size-5" aria-hidden />
+              Payment complete
+            </DialogTitle>
+            <DialogDescription>
+              Hand back any change, then start the next sale.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-2 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground text-sm">Invoice</span>
+              <span className="font-mono text-sm font-semibold">{completed.sale_number}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-muted-foreground">Items</span>
+              <span className="tabular-nums">
+                {formatQuantity(
+                  completed.items.reduce((sum, item) => sum + Number(item.quantity), 0),
+                )}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-muted-foreground">Total</span>
+              <span className="tabular-nums">{money(Number(completed.total), currency)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-muted-foreground">Paid</span>
+              <span className="tabular-nums">{money(Number(completed.paid), currency)}</span>
+            </div>
+            {Number(completed.change_amount) > 0 ? (
+              <div className="flex items-center justify-between gap-3 border-t pt-2 text-base font-semibold">
+                <span>Change</span>
+                <span className="tabular-nums">
+                  {money(Number(completed.change_amount), currency)}
+                </span>
+              </div>
+            ) : null}
+            {Number(completed.due) > 0 ? (
+              <div className="text-warning flex items-start gap-2 border-t pt-2 text-sm">
+                <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>
+                  {money(Number(completed.due), currency)} is on{" "}
+                  {completed.customer?.name ?? "the customer"}&apos;s account.
+                </span>
+              </div>
+            ) : null}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => void handlePrint()} disabled={printing}>
+              <Printer className="size-4" />
+              {printing ? "Preparing…" : "Print receipt"}
+            </Button>
+            <Button type="button" onClick={onClose}>
+              New sale
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // --- Payment ---------------------------------------------------------------
+  return (
+    <Dialog open onOpenChange={(next) => !next && !mutation.isPending && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Take payment</DialogTitle>
+          <DialogDescription>
+            {customer ? `On ${customer.name}'s sale.` : "Walk-in sale."} The server calculates the
+            final figures.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex items-end justify-between gap-3 rounded-md border p-3">
+          <span className="text-muted-foreground text-sm">Amount due</span>
+          <span className="text-2xl leading-none font-semibold tabular-nums">
+            {money(totals.total, currency)}
+          </span>
+        </div>
+
+        {methodsQuery.isPending ? (
+          <p className="text-muted-foreground text-sm">Loading payment methods…</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {shown.map((tender, index) => {
+              const method = methodById.get(tender.methodId);
+              return (
+                <div key={tender.key} className="flex flex-col gap-2 rounded-md border p-3">
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={tender.methodId}
+                      onValueChange={(value) => updateTender(tender.key, { methodId: value })}
+                    >
+                      <SelectTrigger className="flex-1" aria-label={`Payment method ${index + 1}`}>
+                        <SelectValue placeholder="Method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {methods.map((option) => (
+                          <SelectItem key={option.id} value={option.id}>
+                            {option.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {shown.length > 1 ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Remove this payment"
+                        onClick={() => setTenders(shown.filter((row) => row.key !== tender.key))}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Amount" htmlFor={`amount-${tender.key}`}>
+                      <Input
+                        id={`amount-${tender.key}`}
+                        inputMode="decimal"
+                        value={tender.amount}
+                        onChange={(event) =>
+                          updateTender(tender.key, { amount: event.target.value })
+                        }
+                        placeholder="0.00"
+                        className="tabular-nums"
+                      />
+                    </Field>
+                    {method?.kind === "cash" ? (
+                      <Field label="Received" htmlFor={`received-${tender.key}`}>
+                        <Input
+                          id={`received-${tender.key}`}
+                          inputMode="decimal"
+                          value={tender.received}
+                          onChange={(event) =>
+                            updateTender(tender.key, { received: event.target.value })
+                          }
+                          placeholder="0.00"
+                          className="tabular-nums"
+                        />
+                      </Field>
+                    ) : null}
+                  </div>
+
+                  {method?.requires_reference ? (
+                    <Field
+                      label="Reference"
+                      htmlFor={`reference-${tender.key}`}
+                      hint={`${method.name} needs its transaction reference.`}
+                    >
+                      <Input
+                        id={`reference-${tender.key}`}
+                        value={tender.reference}
+                        onChange={(event) =>
+                          updateTender(tender.key, { reference: event.target.value })
+                        }
+                        placeholder="e.g. approval code"
+                        autoComplete="off"
+                      />
+                    </Field>
+                  ) : null}
+                </div>
+              );
+            })}
+
+            <Button type="button" variant="outline" size="sm" onClick={addTender} className="self-start">
+              <Plus className="size-4" />
+              Split across another method
+            </Button>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-1 rounded-md border p-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Applied</span>
+            <span className="tabular-nums">{money(applied, currency)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Still due</span>
+            <span className="tabular-nums">{money(due, currency)}</span>
+          </div>
+          <div className="flex items-center justify-between font-medium">
+            <span>Change</span>
+            <span className="tabular-nums">{money(change, currency)}</span>
+          </div>
+        </div>
+
+        <Field label="Note" htmlFor="sale-note" hint="Optional. Prints on the receipt.">
+          <Input
+            id="sale-note"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="e.g. delivery"
+            autoComplete="off"
+          />
+        </Field>
+
+        {blocking ? (
+          <p className="text-warning-foreground flex items-start gap-2 text-sm">
+            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            {blocking}
+          </p>
+        ) : null}
+        {error ? <p className="text-destructive text-sm">{error}</p> : null}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={mutation.isPending}
+          >
+            Back to cart
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              setError(null);
+              mutation.mutate();
+            }}
+            disabled={Boolean(blocking) || mutation.isPending || shown.length === 0}
+          >
+            {mutation.isPending ? "Completing…" : `Complete sale · ${money(totals.total, currency)}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -20,6 +20,9 @@ from app.models.purchase_item import PurchaseItem
 from app.models.refresh_token import RefreshToken
 from app.models.register import Register
 from app.models.role import Role
+from app.models.sale import Sale
+from app.models.sale_item import SaleItem
+from app.models.sale_payment import SalePayment
 from app.models.stock_level import StockLevel
 from app.models.stock_movement import StockMovement
 from app.models.supplier import Supplier
@@ -42,6 +45,9 @@ __all__ = [
     "RefreshToken",
     "Register",
     "Role",
+    "Sale",
+    "SaleItem",
+    "SalePayment",
     "StockLevel",
     "StockMovement",
     "Supplier",
