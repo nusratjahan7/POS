@@ -18,11 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ConflictError, NotFoundError, UnprocessableError
+from app.models.branch import Branch
 from app.models.product import Product
+from app.repositories.branch import BranchRepository
 from app.repositories.brand import BrandRepository
 from app.repositories.category import CategoryRepository
 from app.repositories.product import ProductRepository
 from app.schemas.product import ProductCreate, ProductUpdate
+from app.services.inventory import InventoryService
 from app.utils.pagination import PageParams
 from app.utils.text import normalize_code, slugify
 
@@ -35,6 +38,7 @@ class ProductService:
         self.products = ProductRepository(session)
         self.categories = CategoryRepository(session)
         self.brands = BrandRepository(session)
+        self.branches = BranchRepository(session)
 
     async def get_or_404(self, product_id: uuid.UUID) -> Product:
         product = await self.products.get(product_id)
@@ -55,7 +59,19 @@ class ProductService:
             filters["barcode"] = normalize_code(filters["barcode"])
         return await self.products.list_products(params, sort=sort, **filters)
 
+    async def list_options(self) -> Sequence[Product]:
+        return await self.products.list_all(active_only=True)
+
     # --- Internals ---------------------------------------------------------
+    async def _primary_branch(self) -> Branch | None:
+        """Where a new product's opening stock lands in a single-branch setup.
+
+        Multi-branch stock is managed per branch through the inventory module;
+        product creation has no branch context, so it seeds the default one.
+        """
+        branches = await self.branches.list_all()
+        return branches[0] if branches else None
+
     async def _reload(self, product_id: uuid.UUID) -> Product:
         """Re-read a product after a write.
 
@@ -134,7 +150,7 @@ class ProductService:
             )
 
     # --- Commands ----------------------------------------------------------
-    async def create(self, payload: ProductCreate) -> Product:
+    async def create(self, payload: ProductCreate, *, actor_id: uuid.UUID | None = None) -> Product:
         sku = normalize_code(payload.sku)
         barcode = normalize_code(payload.barcode) if payload.barcode else None
 
@@ -156,14 +172,32 @@ class ProductService:
             discount_price=payload.discount_price,
             unit=payload.unit.strip(),
             minimum_stock=payload.minimum_stock,
-            # Opening balance only; inventory takes over from here.
-            stock_quantity=payload.opening_stock,
+            # Stock starts at zero. Opening stock is applied by the inventory
+            # service below, so it is never a direct write to a stock field.
+            stock_quantity=Decimal("0"),
             description=payload.description,
             image_url=payload.image_url,
             is_active=payload.is_active,
         )
         await self.products.add(product)
-        await self.session.commit()
+
+        branch = await self._primary_branch()
+        if branch is not None:
+            inventory = InventoryService(self.session)
+            if payload.opening_stock > 0:
+                # A movement, exactly like every other stock change. Commits here.
+                await inventory.set_opening_stock(
+                    product_id=product.id,
+                    branch_id=branch.id,
+                    quantity=payload.opening_stock,
+                    user_id=actor_id,
+                )
+            else:
+                # Still give it a zero level so it shows in the inventory table.
+                await inventory.ensure_level(product_id=product.id, branch_id=branch.id)
+        else:
+            await self.session.commit()
+
         return await self._reload(product.id)
 
     async def update(self, product_id: uuid.UUID, payload: ProductUpdate) -> Product:

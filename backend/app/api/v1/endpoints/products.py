@@ -13,11 +13,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import Pagination, SessionDep, require_permissions
+from app.api.deps import CurrentUser, Pagination, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
 from app.repositories.product import ProductRepository
 from app.schemas.common import Page
-from app.schemas.product import ProductCreate, ProductRead, ProductUpdate
+from app.schemas.product import ProductCreate, ProductOption, ProductRead, ProductUpdate
 from app.services.product import ProductService
 from app.utils.sorting import parse_sort
 
@@ -58,14 +58,29 @@ async def list_products(
     )
 
 
+@router.get(
+    "/options",
+    response_model=list[ProductOption],
+    dependencies=[Depends(require_permissions(PermissionCode.CATALOG_READ))],
+)
+async def product_options(session: SessionDep) -> list[ProductOption]:
+    """Lightweight active-only list for pickers (e.g. stock adjustments)."""
+    products = await ProductService(session).list_options()
+    return [ProductOption.model_validate(product) for product in products]
+
+
 @router.post(
     "",
     response_model=ProductRead,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_permissions(PermissionCode.CATALOG_WRITE))],
 )
-async def create_product(session: SessionDep, payload: ProductCreate) -> ProductRead:
-    return ProductRead.model_validate(await ProductService(session).create(payload))
+async def create_product(
+    session: SessionDep, actor: CurrentUser, payload: ProductCreate
+) -> ProductRead:
+    return ProductRead.model_validate(
+        await ProductService(session).create(payload, actor_id=actor.id)
+    )
 
 
 @router.get(

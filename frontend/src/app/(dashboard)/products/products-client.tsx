@@ -23,7 +23,7 @@ import { describeError, mediaUrl } from "@/lib/api/client";
 import { brandsApi, categoriesApi } from "@/lib/api/catalog";
 import { productsApi, type Product, type StockStatus } from "@/lib/api/products";
 import { businessApi } from "@/lib/api/settings";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatQuantity } from "@/lib/format";
 
 const ALL = "all";
 
@@ -158,10 +158,7 @@ export function ProductsClient() {
               <ImageIcon className="text-muted-foreground size-4" aria-hidden />
             )}
           </div>
-          <div className="flex min-w-0 flex-col">
-            <span className="truncate font-medium">{product.name}</span>
-            <span className="text-muted-foreground text-xs">{product.unit}</span>
-          </div>
+          <span className="truncate font-medium">{product.name}</span>
         </div>
       ),
     },
@@ -222,7 +219,7 @@ export function ProductsClient() {
             {STOCK_STATUS[product.stock_status].label}
           </Badge>
           <span className="text-muted-foreground text-xs tabular-nums">
-            {product.stock_quantity} {product.unit}
+            {formatQuantity(product.stock_quantity)}
           </span>
         </div>
       ),

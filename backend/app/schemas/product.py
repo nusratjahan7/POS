@@ -103,3 +103,14 @@ class ProductRead(ORMModel):
     is_low_stock: bool
     created_at: datetime
     updated_at: datetime
+
+
+class ProductOption(ORMModel):
+    """Lightweight active-only product list for pickers (e.g. stock adjustments)."""
+
+    id: uuid.UUID
+    name: str
+    sku: str
+    barcode: str | None
+    unit: str
+    minimum_stock: Decimal

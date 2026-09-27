@@ -37,7 +37,8 @@ const foundations = [
   { label: "Users, roles & permissions", state: "ready" },
   { label: "Store, branches & registers", state: "ready" },
   { label: "Products, categories & brands", state: "ready" },
-  { label: "Sales & inventory", state: "planned" },
+  { label: "Inventory & stock ledger", state: "ready" },
+  { label: "Sales", state: "planned" },
 ] as const;
 
 export default function DashboardPage() {

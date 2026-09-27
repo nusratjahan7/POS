@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, describeError } from "@/lib/api/client";
 import { brandsApi, categoriesApi } from "@/lib/api/catalog";
 import { productsApi, type Product } from "@/lib/api/products";
+import { formatQuantity } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const NONE = "none";
@@ -385,7 +386,7 @@ export function ProductFormDialog({ product, onClose, onSaved }: ProductFormDial
                 >
                   <Input
                     id="product-stock"
-                    value={product.stock_quantity}
+                    value={formatQuantity(product.stock_quantity)}
                     readOnly
                     disabled
                     className="tabular-nums"

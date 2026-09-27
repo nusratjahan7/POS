@@ -38,3 +38,18 @@ export function formatMoney(
     return amount.toFixed(2);
   }
 }
+
+/**
+ * Formats a quantity, dropping the trailing zeros the API's fixed-scale decimals
+ * carry, so `"79.000"` reads as `"79"` and `"45.500"` as `"45.5"`. Units are never
+ * shown — they are a product attribute, not part of a stock figure.
+ */
+export function formatQuantity(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  let text = typeof value === "number" ? String(value) : value.trim();
+  if (text.includes(".")) {
+    text = text.replace(/0+$/, "").replace(/\.$/, "");
+  }
+  if (text === "" || text === "-") text = "0";
+  return text;
+}

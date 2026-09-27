@@ -65,9 +65,23 @@ export type ProductListParams = {
   sort?: string;
 };
 
+export type ProductOption = {
+  id: string;
+  name: string;
+  sku: string;
+  barcode: string | null;
+  unit: string;
+  minimum_stock: string;
+};
+
 export const productsApi = {
   list(params: ProductListParams = {}): Promise<Page<Product>> {
     return apiRequest<Page<Product>>(withQuery("/products", { page_size: 20, ...params }));
+  },
+
+  /** Lightweight active-only list for pickers. */
+  options(): Promise<ProductOption[]> {
+    return apiRequest<ProductOption[]>("/products/options");
   },
 
   create(payload: ProductPayload): Promise<Product> {

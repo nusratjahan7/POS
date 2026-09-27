@@ -92,3 +92,11 @@ class ProductRepository(BaseRepository[Product]):
         else:
             stmt = stmt.order_by(Product.name.asc())
         return await self.paginate(stmt, params)
+
+    async def list_all(self, *, active_only: bool = True) -> Sequence[Product]:
+        stmt = select(Product).where(Product.deleted_at.is_(None))
+        if active_only:
+            stmt = stmt.where(Product.is_active.is_(True))
+        return (
+            (await self.session.execute(stmt.order_by(Product.name.asc()))).scalars().unique().all()
+        )

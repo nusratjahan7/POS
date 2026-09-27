@@ -16,6 +16,8 @@ from app.models.product import Product
 from app.models.refresh_token import RefreshToken
 from app.models.register import Register
 from app.models.role import Role
+from app.models.stock_level import StockLevel
+from app.models.stock_movement import StockMovement
 from app.models.user import User
 
 __all__ = [
@@ -30,6 +32,8 @@ __all__ = [
     "RefreshToken",
     "Register",
     "Role",
+    "StockLevel",
+    "StockMovement",
     "User",
     "role_permissions",
     "user_roles",
