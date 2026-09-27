@@ -100,3 +100,10 @@ class ProductRepository(BaseRepository[Product]):
         return (
             (await self.session.execute(stmt.order_by(Product.name.asc()))).scalars().unique().all()
         )
+
+    async def list_by_ids(self, product_ids: Sequence[uuid.UUID]) -> Sequence[Product]:
+        ids = list(product_ids)
+        if not ids:
+            return []
+        stmt = select(Product).where(Product.id.in_(ids), Product.deleted_at.is_(None))
+        return (await self.session.execute(stmt)).scalars().unique().all()

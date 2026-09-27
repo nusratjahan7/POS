@@ -4,7 +4,8 @@ import uuid
 from collections.abc import Sequence
 from typing import Any, ClassVar
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, and_, func, select
+from sqlalchemy.orm import lazyload
 
 from app.models.category import Category
 from app.models.product import Product
@@ -91,3 +92,25 @@ class CategoryRepository(BaseRepository[Category]):
         if active_only:
             stmt = stmt.where(Category.is_active.is_(True))
         return (await self.session.execute(stmt.order_by(Category.name.asc()))).scalars().all()
+
+    async def list_with_product_counts(self) -> Sequence[tuple[Category, int]]:
+        """Active categories with the number of live, active products in each."""
+        stmt = (
+            select(Category, func.count(Product.id))
+            .outerjoin(
+                Product,
+                and_(
+                    Product.category_id == Category.id,
+                    Product.deleted_at.is_(None),
+                    Product.is_active.is_(True),
+                ),
+            )
+            .where(Category.deleted_at.is_(None))
+            # The parent relation is eagerly joined by default; drop it here so
+            # the aggregate stays a plain GROUP BY on the category's primary key.
+            .options(lazyload(Category.parent))
+            .group_by(Category.id)
+            .order_by(Category.name.asc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [(category, int(count)) for category, count in rows]

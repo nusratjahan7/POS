@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from decimal import Decimal
 from typing import Any, ClassVar
 
@@ -79,6 +79,19 @@ class StockLevelRepository(BaseRepository[StockLevel]):
         else:
             stmt = stmt.order_by(Product.name.asc())
         return await self.paginate(stmt, params)
+
+    async def quantities_for_products(
+        self, product_ids: Collection[uuid.UUID], branch_id: uuid.UUID
+    ) -> dict[uuid.UUID, Decimal]:
+        """On-hand quantity at one branch, for a set of products (missing = zero)."""
+        ids = list(product_ids)
+        if not ids:
+            return {}
+        stmt = select(StockLevel.product_id, StockLevel.quantity).where(
+            StockLevel.branch_id == branch_id, StockLevel.product_id.in_(ids)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return {row.product_id: Decimal(row.quantity) for row in rows}
 
     async def summary(self, *, branch_id: uuid.UUID | None = None) -> dict[str, int | Decimal]:
         stmt = (

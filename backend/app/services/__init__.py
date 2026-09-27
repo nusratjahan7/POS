@@ -6,6 +6,7 @@ from app.services.business import BusinessService
 from app.services.customer import CustomerService
 from app.services.inventory import InventoryService
 from app.services.payment_method import PaymentMethodService
+from app.services.pos import PosService
 from app.services.purchase import PurchaseService
 from app.services.register import RegisterService
 from app.services.role import RoleService
@@ -20,6 +21,7 @@ __all__ = [
     "InventoryService",
     "IssuedSession",
     "PaymentMethodService",
+    "PosService",
     "PurchaseService",
     "RegisterService",
     "RoleService",
