@@ -1,0 +1,50 @@
+# ---------------------------------------------------------------------------
+# Local development infrastructure for the POS system.
+#
+#   docker compose up -d            # start Postgres (and Redis)
+#   docker compose --profile cache up -d   # include Redis
+#
+# Connection string used by the backend (see backend/.env.example):
+#   postgresql+asyncpg://pos:pos@localhost:5432/pos
+# ---------------------------------------------------------------------------
+name: pos
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pos
+      POSTGRES_PASSWORD: pos
+      POSTGRES_DB: pos
+      # Deterministic collation so ORDER BY is stable across machines.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pos_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos -d pos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Optional. Not required for the current feature set; enable when a
+  # multi-process rate limiter / cache is introduced.
+  redis:
+    image: redis:7-alpine
+    container_name: pos-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - pos_redisdata:/data
+    profiles:
+      - cache
+
+volumes:
+  pos_pgdata:
+  pos_redisdata:
