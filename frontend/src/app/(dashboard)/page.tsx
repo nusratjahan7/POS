@@ -39,6 +39,7 @@ const foundations = [
   { label: "Products, categories & brands", state: "ready" },
   { label: "Inventory & stock ledger", state: "ready" },
   { label: "Suppliers & purchases", state: "ready" },
+  { label: "Customers", state: "ready" },
   { label: "Sales", state: "planned" },
 ] as const;
 

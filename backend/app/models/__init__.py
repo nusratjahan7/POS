@@ -9,6 +9,8 @@ from app.models.branch import Branch
 from app.models.brand import Brand
 from app.models.business import Business
 from app.models.category import Category
+from app.models.customer import Customer
+from app.models.customer_payment import CustomerPayment
 from app.models.password_reset import PasswordResetToken
 from app.models.payment_method import PaymentMethod
 from app.models.permission import Permission
@@ -29,6 +31,8 @@ __all__ = [
     "Brand",
     "Business",
     "Category",
+    "Customer",
+    "CustomerPayment",
     "PasswordResetToken",
     "PaymentMethod",
     "Permission",

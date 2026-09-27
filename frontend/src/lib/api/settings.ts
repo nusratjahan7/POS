@@ -65,6 +65,13 @@ export type RegisterOption = {
 
 export type PaymentKind = "cash" | "card" | "mobile" | "bank" | "other";
 
+export type PaymentMethodOption = {
+  id: string;
+  name: string;
+  code: string;
+  kind: PaymentKind;
+};
+
 export type PaymentMethod = {
   id: string;
   name: string;
@@ -132,6 +139,11 @@ export const paymentMethodsApi = {
     return apiRequest<Page<PaymentMethod>>(
       withQuery("/payment-methods", { page_size: 100, ...params }),
     );
+  },
+
+  /** Active-only methods, for tendering a payment. */
+  options(): Promise<PaymentMethodOption[]> {
+    return apiRequest<PaymentMethodOption[]>("/payment-methods/options");
   },
 
   create(payload: PaymentMethodPayload): Promise<PaymentMethod> {

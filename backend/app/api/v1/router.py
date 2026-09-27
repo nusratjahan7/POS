@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     brands,
     business,
     categories,
+    customers,
     health,
     inventory,
     payment_methods,
@@ -37,6 +38,7 @@ api_router.include_router(products.router)
 api_router.include_router(inventory.router)
 api_router.include_router(suppliers.router)
 api_router.include_router(purchases.router)
+api_router.include_router(customers.router)
 api_router.include_router(uploads.router)
 
 __all__ = ["api_router"]

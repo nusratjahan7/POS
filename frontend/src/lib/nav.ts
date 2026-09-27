@@ -50,7 +50,7 @@ export const navGroups: NavGroup[] = [
       { title: "Inventory", href: "/inventory", icon: Boxes, status: "available", permission: "inventory:read" },
       { title: "Suppliers", href: "/suppliers", icon: Truck, status: "available", permission: "suppliers:read" },
       { title: "Purchases", href: "/purchases", icon: ShoppingCart, status: "available", permission: "purchases:view" },
-      { title: "Customers", href: "/customers", icon: Users, status: "planned", permission: "customers:read" },
+      { title: "Customers", href: "/customers", icon: Users, status: "available", permission: "customers:read" },
     ],
   },
   {
