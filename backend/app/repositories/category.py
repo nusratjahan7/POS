@@ -42,13 +42,33 @@ class CategoryRepository(BaseRepository[Category]):
         )
         return int((await self.session.execute(stmt)).scalar_one())
 
-    def build_list_query(self, *, search: str | None = None, is_active: bool | None = None):
+    async def count_children(self, category_id: uuid.UUID) -> int:
+        stmt = select(func.count(Category.id)).where(
+            Category.parent_id == category_id, Category.deleted_at.is_(None)
+        )
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    def build_list_query(
+        self,
+        *,
+        search: str | None = None,
+        is_active: bool | None = None,
+        parent_id: uuid.UUID | None = None,
+        top_level: bool | None = None,
+    ) -> Select[Any]:
         stmt = select(Category).where(Category.deleted_at.is_(None))
         if search:
             pattern = like_pattern(search)
-            stmt = stmt.where(Category.name.ilike(pattern, escape="\\"))
+            stmt = stmt.where(
+                Category.name.ilike(pattern, escape="\\")
+                | Category.slug.ilike(pattern, escape="\\")
+            )
         if is_active is not None:
             stmt = stmt.where(Category.is_active.is_(is_active))
+        if top_level:
+            stmt = stmt.where(Category.parent_id.is_(None))
+        elif parent_id is not None:
+            stmt = stmt.where(Category.parent_id == parent_id)
         return stmt
 
     async def list_categories(
@@ -56,10 +76,9 @@ class CategoryRepository(BaseRepository[Category]):
         params: PageParams,
         *,
         sort: tuple[Any, bool] | None = None,
-        search: str | None = None,
-        is_active: bool | None = None,
+        **filters: Any,
     ) -> tuple[Sequence[Category], int]:
-        stmt: Select[Any] = self.build_list_query(search=search, is_active=is_active)
+        stmt = self.build_list_query(**filters)
         if sort is not None:
             column, descending = sort
             stmt = stmt.order_by(column.desc() if descending else column.asc())

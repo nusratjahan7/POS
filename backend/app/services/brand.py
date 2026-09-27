@@ -67,6 +67,7 @@ class BrandService:
             name=name,
             slug=await self._unique_slug(name),
             description=payload.description,
+            logo_url=payload.logo_url,
             is_active=payload.is_active,
         )
         await self.brands.add(brand)
@@ -85,6 +86,8 @@ class BrandService:
 
         if "description" in payload.model_fields_set:
             brand.description = payload.description
+        if "logo_url" in payload.model_fields_set:
+            brand.logo_url = payload.logo_url
         if payload.is_active is not None:
             brand.is_active = payload.is_active
 

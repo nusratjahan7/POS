@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload } from "@/lib/api/client";
+import { apiRequest } from "@/lib/api/client";
 import { withQuery, type Page } from "@/lib/api/rbac";
 
 /** The trading entity's profile, currency, time zone and tax settings. */
@@ -147,17 +147,5 @@ export const paymentMethodsApi = {
 
   remove(methodId: string): Promise<void> {
     return apiRequest<void>(`/payment-methods/${methodId}`, { method: "DELETE" });
-  },
-};
-
-export const uploadsApi = {
-  /** Upload an image and receive its site-relative URL. */
-  async uploadImage(file: File): Promise<{ url: string; content_type: string; size: number }> {
-    const formData = new FormData();
-    formData.append("file", file);
-    return apiUpload<{ url: string; content_type: string; size: number }>(
-      "/uploads/images",
-      formData,
-    );
   },
 };

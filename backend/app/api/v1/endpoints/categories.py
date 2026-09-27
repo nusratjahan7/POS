@@ -8,7 +8,13 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.deps import Pagination, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
 from app.repositories.category import CategoryRepository
-from app.schemas.category import CategoryCreate, CategoryRead, CategorySummary, CategoryUpdate
+from app.schemas.category import (
+    CategoryCreate,
+    CategoryNode,
+    CategoryRead,
+    CategorySummary,
+    CategoryUpdate,
+)
 from app.schemas.common import Page
 from app.services.category import CategoryService
 from app.utils.sorting import parse_sort
@@ -24,14 +30,20 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 async def list_categories(
     session: SessionDep,
     params: Pagination,
-    search: Annotated[str | None, Query(max_length=120)] = None,
+    search: Annotated[str | None, Query(max_length=120, description="Name or slug")] = None,
     is_active: Annotated[bool | None, Query()] = None,
+    parent_id: Annotated[
+        uuid.UUID | None, Query(description="Direct children of this parent")
+    ] = None,
+    top_level: Annotated[bool | None, Query(description="Only categories with no parent")] = None,
     sort: Annotated[str | None, Query(description="e.g. name, -created_at")] = None,
 ) -> Page[CategoryRead]:
     categories, total = await CategoryService(session).list_categories(
         params,
         search=search,
         is_active=is_active,
+        parent_id=parent_id,
+        top_level=top_level,
         sort=parse_sort(sort, CategoryRepository.SORTABLE, default="name"),
     )
     return Page.build(
@@ -40,6 +52,16 @@ async def list_categories(
         page=params.page,
         page_size=params.page_size,
     )
+
+
+@router.get(
+    "/tree",
+    response_model=list[CategoryNode],
+    dependencies=[Depends(require_permissions(PermissionCode.CATALOG_READ))],
+)
+async def category_tree(session: SessionDep) -> list[CategoryNode]:
+    """The full category hierarchy, nested for management screens and pickers."""
+    return await CategoryService(session).tree()
 
 
 @router.get(

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImageUp, ShieldAlert, Store, Trash2 } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -11,6 +11,7 @@ import { z } from "zod";
 import { SettingsCard } from "@/app/(dashboard)/settings/settings-card";
 import { SettingsSkeleton } from "@/app/(dashboard)/settings/settings-skeleton";
 import { Can, useCan } from "@/components/auth/can";
+import { ImageUpload } from "@/components/forms/image-upload";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,8 +27,8 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, describeError, mediaUrl } from "@/lib/api/client";
-import { businessApi, uploadsApi, type Business } from "@/lib/api/settings";
+import { ApiError, describeError } from "@/lib/api/client";
+import { businessApi, type Business } from "@/lib/api/settings";
 import { cn } from "@/lib/utils";
 
 const CURRENCIES = [
@@ -417,97 +418,18 @@ function BusinessForm({ business }: { business: Business }) {
 
 function LogoField({ business, canWrite }: { business: Business; canWrite: boolean }) {
   const queryClient = useQueryClient();
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const [logoUrl, setLogoUrl] = React.useState(business.logo_url);
-  const [busy, setBusy] = React.useState(false);
-
-  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    setBusy(true);
-    try {
-      const uploaded = await uploadsApi.uploadImage(file);
-      const updated = await businessApi.update({ logo_url: uploaded.url });
-      setLogoUrl(updated.logo_url);
-      toast.success("Logo updated");
-      void queryClient.invalidateQueries({ queryKey: ["business"] });
-    } catch (cause) {
-      toast.error(describeError(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function removeLogo() {
-    setBusy(true);
-    try {
-      const updated = await businessApi.update({ logo_url: null });
-      setLogoUrl(updated.logo_url);
-      toast.success("Logo removed");
-      void queryClient.invalidateQueries({ queryKey: ["business"] });
-    } catch (cause) {
-      toast.error(describeError(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const resolved = mediaUrl(logoUrl);
 
   return (
-    <div className="flex flex-wrap items-center gap-4">
-      <div className="bg-muted flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border">
-        {resolved ? (
-          // Uploaded media is served from the API origin, so a plain <img> avoids
-          // configuring remote patterns for next/image.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={resolved} alt="Business logo" className="size-full object-contain" />
-        ) : (
-          <Store className="text-muted-foreground size-7" aria-hidden />
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <p className="text-sm font-medium">Logo</p>
-        <p className="text-muted-foreground text-xs">
-          PNG, JPEG, WebP or GIF, up to 5&nbsp;MB. Shown on receipts.
-        </p>
-        <Can permission="business:write">
-          <div className="flex items-center gap-2">
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              className="hidden"
-              onChange={handleFile}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy || !canWrite}
-              onClick={() => inputRef.current?.click()}
-            >
-              {busy ? <Spinner /> : <ImageUp className="size-4" />}
-              {logoUrl ? "Replace" : "Upload"}
-            </Button>
-            {logoUrl ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={busy || !canWrite}
-                onClick={removeLogo}
-              >
-                <Trash2 className="size-4" />
-                Remove
-              </Button>
-            ) : null}
-          </div>
-        </Can>
-      </div>
-    </div>
+    <ImageUpload
+      value={business.logo_url}
+      disabled={!canWrite}
+      label="Logo"
+      hint="PNG, JPEG, WebP or GIF, up to 5 MB. Shown on receipts."
+      onChange={async (url) => {
+        await businessApi.update({ logo_url: url });
+        toast.success(url ? "Logo updated" : "Logo removed");
+        void queryClient.invalidateQueries({ queryKey: ["business"] });
+      }}
+    />
   );
 }

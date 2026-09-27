@@ -1,12 +1,14 @@
 import {
   BarChart3,
   Boxes,
+  FolderTree,
   LayoutDashboard,
   Package,
   Receipt,
   ScanLine,
   Settings,
   ShieldCheck,
+  Tag,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -41,6 +43,8 @@ export const navGroups: NavGroup[] = [
       { title: "Register", href: "/register", icon: ScanLine, status: "planned", permission: "sales:create" },
       { title: "Sales", href: "/sales", icon: Receipt, status: "planned", permission: "sales:read" },
       { title: "Products", href: "/products", icon: Package, status: "planned", permission: "catalog:read" },
+      { title: "Categories", href: "/categories", icon: FolderTree, status: "available", permission: "catalog:read" },
+      { title: "Brands", href: "/brands", icon: Tag, status: "available", permission: "catalog:read" },
       { title: "Inventory", href: "/inventory", icon: Boxes, status: "planned", permission: "inventory:read" },
       { title: "Customers", href: "/customers", icon: Users, status: "planned", permission: "customers:read" },
     ],

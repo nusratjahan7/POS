@@ -36,6 +36,7 @@ const foundations = [
   { label: "Authentication", state: "ready" },
   { label: "Users, roles & permissions", state: "ready" },
   { label: "Store, branches & registers", state: "ready" },
+  { label: "Categories & brands", state: "ready" },
   { label: "Sales & inventory", state: "planned" },
 ] as const;
 
