@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.errors import register_exception_handlers
 from app.api.middleware import RequestContextMiddleware
@@ -59,6 +60,14 @@ def create_app() -> FastAPI:
 
     register_exception_handlers(application)
     application.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+    # Uploaded product images are served read-only, outside the versioned API.
+    settings.media_path.mkdir(parents=True, exist_ok=True)
+    application.mount(
+        settings.MEDIA_URL_PREFIX,
+        StaticFiles(directory=settings.media_path),
+        name="media",
+    )
     return application
 
 

@@ -8,6 +8,16 @@ export const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 ).replace(/\/+$/, "");
 
+/** Origin that serves uploaded media (`/media/...`), derived from the API base. */
+export const MEDIA_BASE_URL = API_BASE_URL.replace(/\/api\/v\d+\/?$/, "");
+
+/** Resolve a site-relative media path (e.g. `/media/x.png`) to an absolute URL. */
+export function mediaUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path) || path.startsWith("data:")) return path;
+  return `${MEDIA_BASE_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
 export type ApiErrorDetail = {
   field?: string | null;
   message: string;
@@ -158,6 +168,43 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (!response.ok) throw await toApiError(response);
 
   if (response.status === 204) return undefined as T;
+
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/**
+ * Multipart variant of {@link apiRequest} for file uploads.
+ *
+ * `Content-Type` is deliberately left unset so the browser adds the multipart
+ * boundary, and the 401 refresh-and-replay behaviour matches the JSON path.
+ */
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  options: { retryOn401?: boolean } = {},
+): Promise<T> {
+  const { retryOn401 = true } = options;
+
+  const headers = new Headers();
+  const token = tokenStore.get();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers,
+    credentials: "include",
+    body: formData,
+  });
+
+  if (response.status === 401 && retryOn401) {
+    if (await refreshSession()) return apiUpload<T>(path, formData, { retryOn401: false });
+    tokenStore.clear();
+    sessionExpiredHandler?.();
+    throw await toApiError(response);
+  }
+
+  if (!response.ok) throw await toApiError(response);
 
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;

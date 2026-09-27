@@ -86,6 +86,25 @@ async def require_superuser(user: CurrentUser) -> User:
     return user
 
 
+def require_any_permission(*codes: str) -> Callable[..., Awaitable[User]]:
+    """Build a dependency satisfied by *any* one of the supplied permission codes.
+
+    Use for endpoints shared by more than one domain, e.g. an image upload that
+    serves both the catalog and the business logo.
+    """
+
+    async def dependency(user: CurrentUser) -> User:
+        if any(user.has_permission(code) for code in codes):
+            return user
+        raise ForbiddenError(
+            "You do not have the required permission(s).",
+            code="insufficient_permissions",
+            details=[{"field": "permissions", "message": f"Requires one of: {', '.join(codes)}"}],
+        )
+
+    return dependency
+
+
 # --- Rate limiting ---------------------------------------------------------
 def client_ip(request: Request) -> str | None:
     """Best-effort client IP.

@@ -38,6 +38,26 @@ export type BranchOption = {
   code: string;
 };
 
+export type Branch = {
+  id: string;
+  name: string;
+  code: string;
+  address: string | null;
+  phone: string | null;
+  is_active: boolean;
+  business_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BranchPayload = {
+  name: string;
+  code: string;
+  address?: string | null;
+  phone?: string | null;
+  is_active?: boolean;
+};
+
 /** Mirrors the backend `UserSummary` returned by the list endpoint. */
 export type ManagedUser = {
   id: string;
@@ -70,7 +90,7 @@ export type UserPayload = {
 
 type QueryValue = string | number | boolean | undefined;
 
-function withQuery(path: string, params: Record<string, QueryValue>): string {
+export function withQuery(path: string, params: Record<string, QueryValue>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== "") search.set(key, String(value));
@@ -136,7 +156,28 @@ export const usersApi = {
 };
 
 export const branchesApi = {
+  list(
+    params: { page?: number; page_size?: number; search?: string; is_active?: boolean } = {},
+  ): Promise<Page<Branch>> {
+    return apiRequest<Page<Branch>>(withQuery("/branches", { page_size: 100, ...params }));
+  },
+
   options(): Promise<BranchOption[]> {
     return apiRequest<BranchOption[]>("/branches/options");
+  },
+
+  create(payload: BranchPayload): Promise<Branch> {
+    return apiRequest<Branch>("/branches", { method: "POST", body: payload });
+  },
+
+  update(
+    branchId: string,
+    payload: Partial<Pick<BranchPayload, "name" | "address" | "phone" | "is_active">>,
+  ): Promise<Branch> {
+    return apiRequest<Branch>(`/branches/${branchId}`, { method: "PATCH", body: payload });
+  },
+
+  remove(branchId: string): Promise<void> {
+    return apiRequest<void>(`/branches/${branchId}`, { method: "DELETE" });
   },
 };

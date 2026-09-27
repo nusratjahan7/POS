@@ -24,6 +24,14 @@ class PermissionCode(StrEnum):
     BRANCHES_READ = "branches:read"
     BRANCHES_WRITE = "branches:write"
 
+    # Store settings (the business entity, its registers and payment methods)
+    BUSINESS_READ = "business:read"
+    BUSINESS_WRITE = "business:write"
+    REGISTERS_READ = "registers:read"
+    REGISTERS_WRITE = "registers:write"
+    PAYMENTS_READ = "payments:read"
+    PAYMENTS_WRITE = "payments:write"
+
     # Catalog (products, categories, modifiers)
     CATALOG_READ = "catalog:read"
     CATALOG_WRITE = "catalog:write"
@@ -51,6 +59,7 @@ class PermissionCode(StrEnum):
     REPORTS_VIEW = "reports:view"
 
     # Platform administration
+    SETTINGS_READ = "settings:read"
     SETTINGS_MANAGE = "settings:manage"
 
 
@@ -76,6 +85,12 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.ROLES_WRITE, "Create and edit roles"),
     PermissionSpec(PermissionCode.BRANCHES_READ, "View branches"),
     PermissionSpec(PermissionCode.BRANCHES_WRITE, "Create and edit branches"),
+    PermissionSpec(PermissionCode.BUSINESS_READ, "View the business profile and tax settings"),
+    PermissionSpec(PermissionCode.BUSINESS_WRITE, "Edit the business profile and tax settings"),
+    PermissionSpec(PermissionCode.REGISTERS_READ, "View registers"),
+    PermissionSpec(PermissionCode.REGISTERS_WRITE, "Create and edit registers"),
+    PermissionSpec(PermissionCode.PAYMENTS_READ, "View payment methods"),
+    PermissionSpec(PermissionCode.PAYMENTS_WRITE, "Create and edit payment methods"),
     PermissionSpec(PermissionCode.CATALOG_READ, "View products and categories"),
     PermissionSpec(PermissionCode.CATALOG_WRITE, "Create and edit products and categories"),
     PermissionSpec(PermissionCode.CATALOG_DELETE, "Delete products and categories"),
@@ -90,6 +105,7 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.CUSTOMERS_READ, "View customers"),
     PermissionSpec(PermissionCode.CUSTOMERS_WRITE, "Create and edit customers"),
     PermissionSpec(PermissionCode.REPORTS_VIEW, "View reports and analytics"),
+    PermissionSpec(PermissionCode.SETTINGS_READ, "Access the organisation settings area"),
     PermissionSpec(PermissionCode.SETTINGS_MANAGE, "Manage organisation-wide settings"),
 )
 
@@ -120,6 +136,12 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.ROLES_READ,
                 PermissionCode.BRANCHES_READ,
                 PermissionCode.BRANCHES_WRITE,
+                PermissionCode.BUSINESS_READ,
+                PermissionCode.REGISTERS_READ,
+                PermissionCode.REGISTERS_WRITE,
+                PermissionCode.PAYMENTS_READ,
+                PermissionCode.PAYMENTS_WRITE,
+                PermissionCode.SETTINGS_READ,
                 PermissionCode.CATALOG_READ,
                 PermissionCode.CATALOG_WRITE,
                 PermissionCode.INVENTORY_READ,
@@ -157,6 +179,9 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
         permissions=frozenset(
             {
                 PermissionCode.BRANCHES_READ,
+                PermissionCode.BUSINESS_READ,
+                PermissionCode.REGISTERS_READ,
+                PermissionCode.PAYMENTS_READ,
                 PermissionCode.CATALOG_READ,
                 PermissionCode.INVENTORY_READ,
                 PermissionCode.SALES_CREATE,

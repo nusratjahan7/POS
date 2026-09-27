@@ -56,7 +56,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { title: "Users", href: "/users", icon: Users, status: "available", permission: "users:read" },
       { title: "Roles", href: "/roles", icon: ShieldCheck, status: "available", permission: "roles:read" },
-      { title: "Settings", href: "/settings", icon: Settings, status: "planned", permission: "settings:manage" },
+      { title: "Settings", href: "/settings", icon: Settings, status: "available", permission: "settings:read" },
     ],
   },
 ];

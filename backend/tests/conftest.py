@@ -41,7 +41,13 @@ from app.core.security import hash_password  # noqa: E402
 from app.db.session import get_session  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.user import User  # noqa: E402
-from app.scripts.seed import seed_branch, seed_permissions, seed_roles  # noqa: E402
+from app.scripts.seed import (  # noqa: E402
+    seed_branch,
+    seed_business,
+    seed_payment_methods,
+    seed_permissions,
+    seed_roles,
+)
 
 SUPERUSER_PASSWORD = "SuperSecret1!"
 CASHIER_PASSWORD = "CashierPass1!"
@@ -142,12 +148,20 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 async def seeded(db_session: AsyncSession) -> SimpleNamespace:
-    """Materialise the permission catalog, built-in roles and a default branch."""
+    """Materialise the permission catalog, built-in roles, a branch and store settings."""
     permissions = await seed_permissions(db_session)
     roles = await seed_roles(db_session, permissions)
     branch = await seed_branch(db_session)
+    business = await seed_business(db_session, branch=branch)
+    payment_methods = await seed_payment_methods(db_session)
     await db_session.commit()
-    return SimpleNamespace(permissions=permissions, roles=roles, branch=branch)
+    return SimpleNamespace(
+        permissions=permissions,
+        roles=roles,
+        branch=branch,
+        business=business,
+        payment_methods=payment_methods,
+    )
 
 
 @pytest.fixture

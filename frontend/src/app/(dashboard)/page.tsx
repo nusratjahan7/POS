@@ -35,6 +35,7 @@ const foundations = [
   { label: "Database & migrations", state: "ready" },
   { label: "Authentication", state: "ready" },
   { label: "Users, roles & permissions", state: "ready" },
+  { label: "Store, branches & registers", state: "ready" },
   { label: "Sales & inventory", state: "planned" },
 ] as const;
 
@@ -109,7 +110,7 @@ export default function DashboardPage() {
                     <EmptyState
                       size="compact"
                       title="No registers configured"
-                      description="Registers are created with the branch settings module."
+                      description="Registers are created in Settings → Registers."
                     />
                   </TableCell>
                 </TableRow>

@@ -19,6 +19,9 @@ dependencies = [
     "pyjwt>=2.10.0",
     "pwdlib[argon2]>=0.2.1",
     "orjson>=3.10.0",
+    # Required by FastAPI for multipart/form-data (product image uploads).
+    "python-multipart>=0.0.18",
+    "tzdata>=2026.4",
 ]
 
 [dependency-groups]

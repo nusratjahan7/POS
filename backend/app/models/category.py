@@ -1,0 +1,34 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from sqlalchemy import Boolean, String, text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+from app.db.mixins import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
+
+if TYPE_CHECKING:
+    from app.models.product import Product
+
+
+class Category(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
+    """A product grouping.
+
+    Intentionally flat. If nesting is ever needed, add a nullable self-referencing
+    ``parent_id`` — existing rows stay valid because it defaults to NULL.
+    """
+
+    __tablename__ = "categories"
+
+    name: Mapped[str] = mapped_column(String(120), unique=True, index=True, nullable=False)
+    slug: Mapped[str] = mapped_column(String(140), unique=True, index=True, nullable=False)
+    description: Mapped[str | None] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False
+    )
+
+    products: Mapped[list[Product]] = relationship(back_populates="category")
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<Category {self.slug}>"

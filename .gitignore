@@ -49,6 +49,9 @@ htmlcov/
 coverage.xml
 .tox/
 
+# Uploaded media (user content, never committed)
+backend/media/
+
 # ---------------------------------------------------------------------------
 # Node / frontend
 # ---------------------------------------------------------------------------

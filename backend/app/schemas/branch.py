@@ -14,6 +14,7 @@ class BranchBase(BaseModel):
     address: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=32)
     is_active: bool = True
+    business_id: uuid.UUID | None = None
 
 
 class BranchCreate(BranchBase):
@@ -25,6 +26,7 @@ class BranchUpdate(BaseModel):
     address: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=32)
     is_active: bool | None = None
+    business_id: uuid.UUID | None = None
 
 
 class BranchRead(ORMModel):
@@ -34,6 +36,7 @@ class BranchRead(ORMModel):
     address: str | None
     phone: str | None
     is_active: bool
+    business_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
 

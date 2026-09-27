@@ -20,3 +20,21 @@ export function initials(name: string): string {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
 }
+
+/**
+ * Formats a monetary string (as the API returns decimals) in the given currency.
+ * Falls back to a plain fixed-point string if the currency code is not valid.
+ */
+export function formatMoney(
+  value: string | number | null | undefined,
+  currency = "USD",
+): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const amount = typeof value === "string" ? Number(value) : value;
+  if (Number.isNaN(amount)) return "—";
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
+  } catch {
+    return amount.toFixed(2);
+  }
+}

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +22,8 @@ from app.core.permissions import DEFAULT_ROLES, PERMISSIONS
 from app.core.security import hash_password
 from app.db.session import SessionFactory
 from app.models.branch import Branch
+from app.models.business import Business
+from app.models.payment_method import PaymentMethod
 from app.models.permission import Permission
 from app.models.role import Role
 from app.models.user import User
@@ -30,7 +33,47 @@ logger = logging.getLogger("app.seed")
 
 DEFAULT_BRANCH_CODE = "MAIN"
 DEFAULT_BRANCH_NAME = "Main Branch"
+DEFAULT_BUSINESS_NAME = "My Business"
 ADMINISTRATOR_ROLE = "Administrator"
+
+
+# The payment methods a new installation can tender with. `is_system` rows are
+# protected from deletion and re-coding (see PaymentMethodService).
+class _PaymentMethodSeed(TypedDict, total=False):
+    name: str
+    code: str
+    kind: str
+    opens_cash_drawer: bool
+    requires_reference: bool
+    sort_order: int
+
+
+DEFAULT_PAYMENT_METHODS: tuple[_PaymentMethodSeed, ...] = (
+    {
+        "name": "Cash",
+        "code": "CASH",
+        "kind": "cash",
+        "opens_cash_drawer": True,
+        "sort_order": 1,
+    },
+    {"name": "Card", "code": "CARD", "kind": "card", "requires_reference": True, "sort_order": 2},
+    {
+        "name": "bKash",
+        "code": "BKASH",
+        "kind": "mobile",
+        "requires_reference": True,
+        "sort_order": 3,
+    },
+    {
+        "name": "Nagad",
+        "code": "NAGAD",
+        "kind": "mobile",
+        "requires_reference": True,
+        "sort_order": 4,
+    },
+    {"name": "Bank", "code": "BANK", "kind": "bank", "requires_reference": True, "sort_order": 5},
+    {"name": "Other", "code": "OTHER", "kind": "other", "sort_order": 6},
+)
 
 
 async def seed_permissions(session: AsyncSession) -> dict[str, Permission]:
@@ -93,6 +136,48 @@ async def seed_branch(session: AsyncSession) -> Branch:
     return branch
 
 
+async def seed_business(session: AsyncSession, *, branch: Branch) -> Business:
+    business = (
+        (await session.execute(select(Business).order_by(Business.created_at.asc()).limit(1)))
+        .scalars()
+        .first()
+    )
+    if business is None:
+        business = Business(name=DEFAULT_BUSINESS_NAME, currency="USD", timezone="UTC")
+        session.add(business)
+        await session.flush()
+        logger.info("Created default business %s", DEFAULT_BUSINESS_NAME)
+    if branch.business_id is None:
+        branch.business_id = business.id
+    return business
+
+
+async def seed_payment_methods(session: AsyncSession) -> dict[str, PaymentMethod]:
+    existing = {
+        method.code: method for method in (await session.execute(select(PaymentMethod))).scalars()
+    }
+
+    created = 0
+    for spec in DEFAULT_PAYMENT_METHODS:
+        code = str(spec["code"])
+        method = existing.get(code)
+        if method is None:
+            method = PaymentMethod(code=code, is_system=True)
+            session.add(method)
+            existing[code] = method
+            created += 1
+        method.name = str(spec["name"])
+        method.kind = str(spec["kind"])
+        method.opens_cash_drawer = bool(spec.get("opens_cash_drawer", False))
+        method.requires_reference = bool(spec.get("requires_reference", False))
+        method.sort_order = int(spec.get("sort_order", 0))
+        method.is_system = True
+
+    await session.flush()
+    logger.info("Payment methods: %d total (%d created)", len(existing), created)
+    return existing
+
+
 async def seed_superuser(
     session: AsyncSession,
     *,
@@ -131,6 +216,8 @@ async def run() -> None:
         permissions = await seed_permissions(session)
         roles = await seed_roles(session, permissions)
         branch = await seed_branch(session)
+        await seed_business(session, branch=branch)
+        await seed_payment_methods(session)
         await seed_superuser(session, branch=branch, roles=roles)
         await session.commit()
     logger.info("Seed complete. Sign in as %s", settings.FIRST_SUPERUSER_EMAIL)

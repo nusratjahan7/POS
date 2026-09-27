@@ -8,6 +8,7 @@ app can boot in development and CI without a populated environment.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
 
@@ -76,6 +77,14 @@ class Settings(BaseSettings):
     FRONTEND_APP_URL: str = "http://localhost:3000"
     PASSWORD_RESET_PATH: str = "/reset-password"
 
+    # --- Media / uploads ---------------------------------------------------
+    # Local storage root for uploaded product images (relative to the backend
+    # directory). Front it with object storage in production — the API returns a
+    # site-relative URL either way.
+    MEDIA_ROOT: str = "media"
+    MEDIA_URL_PREFIX: str = "/media"
+    MAX_IMAGE_BYTES: int = 5 * 1024 * 1024
+
     # --- Bootstrap ---------------------------------------------------------
     FIRST_SUPERUSER_EMAIL: EmailStr = "admin@pos.example.com"
     FIRST_SUPERUSER_PASSWORD: str = "ChangeMe123!"
@@ -113,6 +122,11 @@ class Settings(BaseSettings):
     @property
     def password_reset_ttl_seconds(self) -> int:
         return self.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES * 60
+
+    @property
+    def media_path(self) -> Path:
+        """Absolute storage root for uploads."""
+        return Path(self.MEDIA_ROOT).resolve()
 
     def password_reset_url(self, token: str) -> str:
         """Absolute link embedded in the reset email, built from settings."""

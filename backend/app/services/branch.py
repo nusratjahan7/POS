@@ -9,10 +9,12 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError, UnprocessableError
 from app.models.branch import Branch
 from app.repositories.branch import BranchRepository
+from app.repositories.register import RegisterRepository
 from app.schemas.branch import BranchCreate, BranchUpdate
+from app.services.business import BusinessService
 from app.utils.pagination import PageParams
 from app.utils.text import normalize_code
 
@@ -21,6 +23,8 @@ class BranchService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.branches = BranchRepository(session)
+        self.registers = RegisterRepository(session)
+        self.business = BusinessService(session)
 
     async def get_or_404(self, branch_id: uuid.UUID) -> Branch:
         branch = await self.branches.get(branch_id)
@@ -43,6 +47,19 @@ class BranchService:
     async def list_all(self) -> Sequence[Branch]:
         return await self.branches.list_all()
 
+    async def _resolve_business_id(self, business_id: uuid.UUID | None) -> uuid.UUID:
+        """Every branch belongs to the business. Default to it when unspecified."""
+        if business_id is None:
+            return (await self.business.get()).id
+        target = await self.business.businesses.get(business_id)
+        if target is None or target.is_deleted:
+            raise UnprocessableError(
+                "The selected business does not exist.",
+                code="unknown_business",
+                details=[{"field": "business_id", "message": "Unknown business."}],
+            )
+        return business_id
+
     async def create(self, payload: BranchCreate) -> Branch:
         code = normalize_code(payload.code)
         if await self.branches.code_exists(code):
@@ -58,6 +75,7 @@ class BranchService:
             address=payload.address,
             phone=payload.phone,
             is_active=payload.is_active,
+            business_id=await self._resolve_business_id(payload.business_id),
         )
         await self.branches.add(branch)
         await self.session.commit()
@@ -73,6 +91,8 @@ class BranchService:
             branch.phone = payload.phone
         if payload.is_active is not None:
             branch.is_active = payload.is_active
+        if payload.business_id is not None:
+            branch.business_id = await self._resolve_business_id(payload.business_id)
         await self.session.commit()
         return branch
 
@@ -83,6 +103,12 @@ class BranchService:
             raise ConflictError(
                 f"{assigned} user(s) are still assigned to this branch.",
                 code="branch_in_use",
+            )
+        registers = await self.registers.count_in_branch(branch.id)
+        if registers:
+            raise ConflictError(
+                f"{registers} register(s) still belong to this branch.",
+                code="branch_has_registers",
             )
         branch.is_active = False
         branch.deleted_at = datetime.now(UTC)
