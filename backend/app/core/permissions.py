@@ -17,6 +17,7 @@ class PermissionCode(StrEnum):
     USERS_READ = "users:read"
     USERS_WRITE = "users:write"
     USERS_DELETE = "users:delete"
+    USERS_RESET_PASSWORD = "users:reset_password"
     ROLES_READ = "roles:read"
     ROLES_WRITE = "roles:write"
 
@@ -41,9 +42,12 @@ class PermissionCode(StrEnum):
     INVENTORY_READ = "inventory:read"
     INVENTORY_ADJUST = "inventory:adjust"
 
-    # Purchasing (supplier orders and goods received)
+    # Purchasing (suppliers and purchase orders)
+    SUPPLIERS_READ = "suppliers:read"
+    SUPPLIERS_WRITE = "suppliers:write"
     PURCHASES_VIEW = "purchases:view"
     PURCHASES_CREATE = "purchases:create"
+    PURCHASES_UPDATE = "purchases:update"
 
     # Selling
     SALES_CREATE = "sales:create"
@@ -81,6 +85,9 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.USERS_READ, "View staff accounts"),
     PermissionSpec(PermissionCode.USERS_WRITE, "Create and edit staff accounts"),
     PermissionSpec(PermissionCode.USERS_DELETE, "Deactivate staff accounts"),
+    PermissionSpec(
+        PermissionCode.USERS_RESET_PASSWORD, "Reset another user's password (Administrator only)"
+    ),
     PermissionSpec(PermissionCode.ROLES_READ, "View roles and their permissions"),
     PermissionSpec(PermissionCode.ROLES_WRITE, "Create and edit roles"),
     PermissionSpec(PermissionCode.BRANCHES_READ, "View branches"),
@@ -96,8 +103,11 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.CATALOG_DELETE, "Delete products and categories"),
     PermissionSpec(PermissionCode.INVENTORY_READ, "View stock levels"),
     PermissionSpec(PermissionCode.INVENTORY_ADJUST, "Adjust and transfer stock"),
+    PermissionSpec(PermissionCode.SUPPLIERS_READ, "View suppliers and their balances"),
+    PermissionSpec(PermissionCode.SUPPLIERS_WRITE, "Create and edit suppliers"),
     PermissionSpec(PermissionCode.PURCHASES_VIEW, "View purchase orders and receipts"),
-    PermissionSpec(PermissionCode.PURCHASES_CREATE, "Raise purchase orders and receive goods"),
+    PermissionSpec(PermissionCode.PURCHASES_CREATE, "Raise purchase orders"),
+    PermissionSpec(PermissionCode.PURCHASES_UPDATE, "Edit, receive and cancel purchase orders"),
     PermissionSpec(PermissionCode.SALES_CREATE, "Ring up sales"),
     PermissionSpec(PermissionCode.SALES_READ, "View sales history"),
     PermissionSpec(PermissionCode.SALES_VOID, "Void sales"),
@@ -110,6 +120,11 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
 )
 
 ALL_PERMISSION_CODES: frozenset[str] = frozenset(spec.code.value for spec in PERMISSIONS)
+
+# The built-in role that owns the whole catalog. It is protected from edits, and
+# an account holding it (or a superuser) is treated as an *administrator* by the
+# password-protection guards — one shared name, referenced in one place.
+ADMINISTRATOR_ROLE_NAME = "Administrator"
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,8 +161,11 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.CATALOG_WRITE,
                 PermissionCode.INVENTORY_READ,
                 PermissionCode.INVENTORY_ADJUST,
+                PermissionCode.SUPPLIERS_READ,
+                PermissionCode.SUPPLIERS_WRITE,
                 PermissionCode.PURCHASES_VIEW,
                 PermissionCode.PURCHASES_CREATE,
+                PermissionCode.PURCHASES_UPDATE,
                 PermissionCode.SALES_CREATE,
                 PermissionCode.SALES_READ,
                 PermissionCode.SALES_VOID,
@@ -167,8 +185,11 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.CATALOG_READ,
                 PermissionCode.INVENTORY_READ,
                 PermissionCode.INVENTORY_ADJUST,
+                PermissionCode.SUPPLIERS_READ,
+                PermissionCode.SUPPLIERS_WRITE,
                 PermissionCode.PURCHASES_VIEW,
                 PermissionCode.PURCHASES_CREATE,
+                PermissionCode.PURCHASES_UPDATE,
                 PermissionCode.REPORTS_VIEW,
             }
         ),

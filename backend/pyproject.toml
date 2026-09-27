@@ -69,6 +69,7 @@ ignore = [
 "tests/**" = ["S", "T20"]
 "app/core/config.py" = ["S105"]   # documented non-production defaults
 "app/schemas/auth.py" = ["S105"]  # "bearer" token type is not a password
+"app/core/permissions.py" = ["S105"]  # permission codes (e.g. users:reset_password) are not secrets
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

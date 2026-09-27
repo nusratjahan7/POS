@@ -15,6 +15,7 @@ from app.core.exceptions import (
     ForbiddenError,
     NotFoundError,
 )
+from app.core.permissions import ADMINISTRATOR_ROLE_NAME
 from app.models.permission import Permission
 from app.models.role import Role
 from app.repositories.permission import PermissionRepository
@@ -73,6 +74,11 @@ class RoleService:
 
     async def update(self, role_id: uuid.UUID, payload: RoleUpdate) -> Role:
         role = await self.get_or_404(role_id)
+        if role.name == ADMINISTRATOR_ROLE_NAME:
+            raise ForbiddenError(
+                "The Administrator role cannot be changed.",
+                code="administrator_role_immutable",
+            )
 
         if payload.name is not None:
             name = payload.name.strip()

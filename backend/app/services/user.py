@@ -10,7 +10,9 @@ from typing import Any
 import anyio
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import audit
 from app.core.exceptions import BadRequestError, ConflictError, ForbiddenError, NotFoundError
+from app.core.permissions import ADMINISTRATOR_ROLE_NAME
 from app.core.security import hash_password
 from app.models.branch import Branch
 from app.models.role import Role
@@ -74,6 +76,7 @@ class UserService:
             )
 
         roles = await self._resolve_roles(payload.role_ids)
+        self._assert_may_manage_administrator_role(actor, current=[], new=roles)
         branch = await self._resolve_branch(payload.branch_id)
 
         user = User(
@@ -103,7 +106,9 @@ class UserService:
             user.branch = await self._resolve_branch(payload.branch_id)
 
         if "role_ids" in provided and payload.role_ids is not None:
-            user.roles = list(await self._resolve_roles(payload.role_ids))
+            new_roles = await self._resolve_roles(payload.role_ids)
+            self._assert_may_manage_administrator_role(actor, current=user.roles, new=new_roles)
+            user.roles = list(new_roles)
 
         if payload.is_active is not None and payload.is_active != user.is_active:
             if not payload.is_active:
@@ -127,10 +132,28 @@ class UserService:
         actor: User,
     ) -> None:
         user = await self.get_or_404(user_id)
+
+        # An Administrator's password may only be changed by that same
+        # Administrator through the current-password flow — never reset by
+        # another administrator, a manager, or any other user.
+        if user.is_administrator:
+            audit(
+                "password.reset_denied",
+                actor_id=str(actor.id),
+                target_id=str(user.id),
+                reason="administrator_protected",
+            )
+            raise ForbiddenError(
+                "An Administrator's password can only be changed by that Administrator, "
+                "using their current password.",
+                code="administrator_password_protected",
+            )
+
         user.hashed_password = await anyio.to_thread.run_sync(hash_password, payload.password)
         # Force re-authentication everywhere after an administrative reset.
         await self.tokens.revoke_all_for_user(user.id)
         await self.session.commit()
+        audit("password.reset_by_admin", actor_id=str(actor.id), target_id=str(user.id))
 
     async def deactivate(self, user_id: uuid.UUID, *, actor: User) -> None:
         user = await self.get_or_404(user_id)
@@ -146,6 +169,24 @@ class UserService:
         await self.session.commit()
 
     # --- Internals ---------------------------------------------------------
+    @staticmethod
+    def _assert_may_manage_administrator_role(
+        actor: User, *, current: Sequence[Role], new: Sequence[Role]
+    ) -> None:
+        """Only an Administrator may grant or revoke the Administrator role.
+
+        Without this, anyone holding ``users:write`` (e.g. a Manager) could mint
+        an administrator account with a known password and sign in as it —
+        bypassing the protection of Administrator passwords entirely.
+        """
+        if actor.is_administrator:
+            return
+        if any(role.name == ADMINISTRATOR_ROLE_NAME for role in (*current, *new)):
+            raise ForbiddenError(
+                "Only an Administrator may assign or remove the Administrator role.",
+                code="administrator_role_assignment_forbidden",
+            )
+
     async def _ensure_superuser_survives(self, user: User) -> None:
         if not user.is_superuser:
             return

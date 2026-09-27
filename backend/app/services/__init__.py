@@ -5,8 +5,10 @@ from app.services.branch import BranchService
 from app.services.business import BusinessService
 from app.services.inventory import InventoryService
 from app.services.payment_method import PaymentMethodService
+from app.services.purchase import PurchaseService
 from app.services.register import RegisterService
 from app.services.role import RoleService
+from app.services.supplier import SupplierService
 from app.services.user import UserService
 
 __all__ = [
@@ -16,7 +18,9 @@ __all__ = [
     "InventoryService",
     "IssuedSession",
     "PaymentMethodService",
+    "PurchaseService",
     "RegisterService",
     "RoleService",
+    "SupplierService",
     "UserService",
 ]

@@ -100,6 +100,22 @@ async def test_system_role_permissions_can_be_updated(
     assert [p["code"] for p in response.json()["permissions"]] == ["sales:create"]
 
 
+async def test_the_administrator_role_cannot_be_changed(
+    client: AsyncClient, auth_headers: dict[str, str], seeded: SimpleNamespace
+) -> None:
+    """Unlike other system roles, Administrator is fully locked — even to itself."""
+    role_id = seeded.roles["Administrator"].id
+
+    response = await client.patch(
+        f"{ROLES}/{role_id}",
+        headers=auth_headers,
+        json={"permission_codes": ["sales:create"]},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "administrator_role_immutable"
+
+
 async def test_role_in_use_cannot_be_deleted(
     client: AsyncClient, auth_headers: dict[str, str], cashier: User
 ) -> None:

@@ -1,4 +1,9 @@
-"""Password reset: requesting, consuming, and the single-use guarantees."""
+"""Password reset: requesting, consuming, and the single-use guarantees.
+
+These exercise the **non-administrator** path. Administrator accounts are
+deliberately excluded from the emailed reset flow (see
+``test_admin_password_protection.py``), so the subject here is a Cashier.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +24,8 @@ RESET = "/api/v1/auth/reset-password"
 LOGIN = "/api/v1/auth/login"
 REFRESH = "/api/v1/auth/refresh"
 
-CURRENT_PASSWORD = "SuperSecret1!"
+# The `cashier` fixture's password — a non-administrator, resettable account.
+CURRENT_PASSWORD = "CashierPass1!"
 NEW_PASSWORD = "RotatedPass1!"
 
 
@@ -36,11 +42,11 @@ async def _token_count(db_session: AsyncSession, user_id: object) -> int:
 
 
 async def test_forgot_password_responds_identically_for_known_and_unknown_email(
-    client: AsyncClient, superuser: User
+    client: AsyncClient, cashier: User
 ) -> None:
     """No account enumeration: the response must not reveal registration."""
 
-    known = await client.post(FORGOT, json={"email": superuser.email})
+    known = await client.post(FORGOT, json={"email": cashier.email})
     unknown = await client.post(FORGOT, json={"email": "nobody@example.com"})
 
     assert known.status_code == 200
@@ -49,20 +55,20 @@ async def test_forgot_password_responds_identically_for_known_and_unknown_email(
 
 
 async def test_forgot_password_never_puts_the_token_in_the_response(
-    client: AsyncClient, db_session: AsyncSession, superuser: User
+    client: AsyncClient, db_session: AsyncSession, cashier: User
 ) -> None:
-    issued = await AuthService(db_session).request_password_reset(email=superuser.email)
+    issued = await AuthService(db_session).request_password_reset(email=cashier.email)
     assert issued is not None
 
-    response = await client.post(FORGOT, json={"email": superuser.email})
+    response = await client.post(FORGOT, json={"email": cashier.email})
 
     assert response.status_code == 200
     assert issued.token not in response.text
     assert set(response.json()) == {"message"}
 
 
-async def test_only_the_digest_is_persisted(db_session: AsyncSession, superuser: User) -> None:
-    token = await _issue(db_session, superuser.email)
+async def test_only_the_digest_is_persisted(db_session: AsyncSession, cashier: User) -> None:
+    token = await _issue(db_session, cashier.email)
 
     record = (await db_session.execute(select(PasswordResetToken))).scalars().one()
 
@@ -72,10 +78,10 @@ async def test_only_the_digest_is_persisted(db_session: AsyncSession, superuser:
 
 
 async def test_requesting_a_new_link_supersedes_the_previous_one(
-    client: AsyncClient, db_session: AsyncSession, superuser: User
+    client: AsyncClient, db_session: AsyncSession, cashier: User
 ) -> None:
-    stale = await _issue(db_session, superuser.email)
-    fresh = await _issue(db_session, superuser.email)
+    stale = await _issue(db_session, cashier.email)
+    fresh = await _issue(db_session, cashier.email)
     assert stale != fresh
 
     rejected = await client.post(RESET, json={"token": stale, "new_password": NEW_PASSWORD})
@@ -87,24 +93,24 @@ async def test_requesting_a_new_link_supersedes_the_previous_one(
 
 
 async def test_reset_then_login_with_the_new_password(
-    client: AsyncClient, db_session: AsyncSession, superuser: User
+    client: AsyncClient, db_session: AsyncSession, cashier: User
 ) -> None:
-    token = await _issue(db_session, superuser.email)
+    token = await _issue(db_session, cashier.email)
 
     response = await client.post(RESET, json={"token": token, "new_password": NEW_PASSWORD})
     assert response.status_code == 200
 
-    old = await client.post(LOGIN, json={"email": superuser.email, "password": CURRENT_PASSWORD})
+    old = await client.post(LOGIN, json={"email": cashier.email, "password": CURRENT_PASSWORD})
     assert old.status_code == 401
 
-    new = await client.post(LOGIN, json={"email": superuser.email, "password": NEW_PASSWORD})
+    new = await client.post(LOGIN, json={"email": cashier.email, "password": NEW_PASSWORD})
     assert new.status_code == 200
 
 
 async def test_reset_token_is_single_use(
-    client: AsyncClient, db_session: AsyncSession, superuser: User
+    client: AsyncClient, db_session: AsyncSession, cashier: User
 ) -> None:
-    token = await _issue(db_session, superuser.email)
+    token = await _issue(db_session, cashier.email)
 
     first = await client.post(RESET, json={"token": token, "new_password": NEW_PASSWORD})
     assert first.status_code == 200
@@ -115,9 +121,9 @@ async def test_reset_token_is_single_use(
 
 
 async def test_expired_reset_token_is_rejected(
-    client: AsyncClient, db_session: AsyncSession, superuser: User
+    client: AsyncClient, db_session: AsyncSession, cashier: User
 ) -> None:
-    token = await _issue(db_session, superuser.email)
+    token = await _issue(db_session, cashier.email)
     record = (await db_session.execute(select(PasswordResetToken))).scalars().one()
     record.expires_at = datetime.now(UTC) - timedelta(minutes=1)
     await db_session.commit()
@@ -136,12 +142,12 @@ async def test_unknown_reset_token_is_rejected(client: AsyncClient) -> None:
 
 
 async def test_reset_password_revokes_every_existing_session(
-    client: AsyncClient, anon_client: AsyncClient, db_session: AsyncSession, superuser: User
+    client: AsyncClient, anon_client: AsyncClient, db_session: AsyncSession, cashier: User
 ) -> None:
-    await client.post(LOGIN, json={"email": superuser.email, "password": CURRENT_PASSWORD})
+    await client.post(LOGIN, json={"email": cashier.email, "password": CURRENT_PASSWORD})
     hijacked = client.cookies[settings.REFRESH_COOKIE_NAME]
 
-    token = await _issue(db_session, superuser.email)
+    token = await _issue(db_session, cashier.email)
     response = await client.post(RESET, json={"token": token, "new_password": NEW_PASSWORD})
     assert response.status_code == 200
 
@@ -150,9 +156,9 @@ async def test_reset_password_revokes_every_existing_session(
 
 
 async def test_reset_password_enforces_the_password_policy(
-    client: AsyncClient, db_session: AsyncSession, superuser: User
+    client: AsyncClient, db_session: AsyncSession, cashier: User
 ) -> None:
-    token = await _issue(db_session, superuser.email)
+    token = await _issue(db_session, cashier.email)
 
     response = await client.post(RESET, json={"token": token, "new_password": "weak"})
 
@@ -161,9 +167,9 @@ async def test_reset_password_enforces_the_password_policy(
 
 
 async def test_reset_password_rejects_reusing_the_current_password(
-    client: AsyncClient, db_session: AsyncSession, superuser: User
+    client: AsyncClient, db_session: AsyncSession, cashier: User
 ) -> None:
-    token = await _issue(db_session, superuser.email)
+    token = await _issue(db_session, cashier.email)
 
     response = await client.post(RESET, json={"token": token, "new_password": CURRENT_PASSWORD})
 
@@ -172,15 +178,15 @@ async def test_reset_password_rejects_reusing_the_current_password(
 
 
 async def test_deactivated_account_cannot_request_a_reset(
-    client: AsyncClient, db_session: AsyncSession, superuser: User
+    client: AsyncClient, db_session: AsyncSession, cashier: User
 ) -> None:
-    superuser.is_active = False
+    cashier.is_active = False
     await db_session.commit()
 
-    response = await client.post(FORGOT, json={"email": superuser.email})
+    response = await client.post(FORGOT, json={"email": cashier.email})
 
     assert response.status_code == 200  # still deliberately generic
-    assert await _token_count(db_session, superuser.id) == 0
+    assert await _token_count(db_session, cashier.id) == 0
 
 
 async def test_service_returns_none_for_an_unknown_account(db_session: AsyncSession) -> None:

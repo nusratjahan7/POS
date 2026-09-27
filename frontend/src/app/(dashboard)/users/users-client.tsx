@@ -30,6 +30,11 @@ import { describeError } from "@/lib/api/client";
 import { branchesApi, rolesApi, usersApi, type ManagedUser } from "@/lib/api/rbac";
 import { formatDateTime, initials } from "@/lib/format";
 
+/** A superuser, or anyone holding the built-in Administrator role. */
+function isAdministrator(user: ManagedUser): boolean {
+  return user.is_superuser || user.roles.some((role) => role.name === "Administrator");
+}
+
 export function UsersClient() {
   const canRead = useCan("users:read");
   const canWrite = useCan("users:write");
@@ -240,9 +245,18 @@ export function UsersClient() {
                           >
                             <Pencil className="size-4" />
                           </Button>
+                        </Can>
+
+                        <Can permission="users:reset_password">
                           <Button
                             variant="ghost"
                             size="icon-sm"
+                            disabled={isAdministrator(user)}
+                            title={
+                              isAdministrator(user)
+                                ? "Administrators change their own password"
+                                : undefined
+                            }
                             onClick={() => setResetTarget(user)}
                             aria-label={`Reset password for ${user.full_name}`}
                           >

@@ -105,7 +105,7 @@ class InventoryService:
         stmt = select(StockMovement).where(StockMovement.id == movement_id)
         return (await self.session.execute(stmt)).scalars().one()
 
-    async def record_movement(
+    async def apply_movement(
         self,
         *,
         product_id: uuid.UUID,
@@ -117,7 +117,13 @@ class InventoryService:
         user_id: uuid.UUID | None = None,
         note: str | None = None,
     ) -> StockMovement:
-        """Apply a signed stock change and record it. Commits once, atomically."""
+        """Apply a signed stock change and stage the ledger row.
+
+        Does **not** commit: the caller owns the transaction. This is what lets a
+        multi-step document (receiving a purchase) move several products and
+        update its own records atomically. Use :meth:`record_movement` for a
+        standalone, self-committing change.
+        """
         if quantity == 0:
             raise UnprocessableError(
                 "A movement must change the quantity by a non-zero amount.",
@@ -164,6 +170,32 @@ class InventoryService:
             user_id=user_id,
         )
         self.session.add(movement)
+        await self.session.flush()
+        return movement
+
+    async def record_movement(
+        self,
+        *,
+        product_id: uuid.UUID,
+        branch_id: uuid.UUID,
+        quantity: Decimal,
+        movement_type: str,
+        reference_type: str = "manual",
+        reference_id: uuid.UUID | None = None,
+        user_id: uuid.UUID | None = None,
+        note: str | None = None,
+    ) -> StockMovement:
+        """Apply a signed stock change and record it. Commits once, atomically."""
+        movement = await self.apply_movement(
+            product_id=product_id,
+            branch_id=branch_id,
+            quantity=quantity,
+            movement_type=movement_type,
+            reference_type=reference_type,
+            reference_id=reference_id,
+            user_id=user_id,
+            note=note,
+        )
         await self.session.commit()
         return await self._reload_movement(movement.id)
 

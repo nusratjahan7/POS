@@ -13,11 +13,15 @@ from app.models.password_reset import PasswordResetToken
 from app.models.payment_method import PaymentMethod
 from app.models.permission import Permission
 from app.models.product import Product
+from app.models.purchase import Purchase
+from app.models.purchase_item import PurchaseItem
 from app.models.refresh_token import RefreshToken
 from app.models.register import Register
 from app.models.role import Role
 from app.models.stock_level import StockLevel
 from app.models.stock_movement import StockMovement
+from app.models.supplier import Supplier
+from app.models.supplier_payment import SupplierPayment
 from app.models.user import User
 
 __all__ = [
@@ -29,11 +33,15 @@ __all__ = [
     "PaymentMethod",
     "Permission",
     "Product",
+    "Purchase",
+    "PurchaseItem",
     "RefreshToken",
     "Register",
     "Role",
     "StockLevel",
     "StockMovement",
+    "Supplier",
+    "SupplierPayment",
     "User",
     "role_permissions",
     "user_roles",

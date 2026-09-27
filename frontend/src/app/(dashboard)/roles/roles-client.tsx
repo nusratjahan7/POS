@@ -185,7 +185,7 @@ export function RolesClient() {
                               <Button
                                 variant="ghost"
                                 size="icon-sm"
-                                disabled={!canWrite}
+                                disabled={!canWrite || role.name === "Administrator"}
                                 onClick={() => openEdit(role)}
                                 aria-label={`Edit ${role.name}`}
                               >
@@ -194,7 +194,11 @@ export function RolesClient() {
                             </span>
                           </TooltipTrigger>
                           <TooltipContent>
-                            {canWrite ? "Edit role" : "Requires roles:write"}
+                            {role.name === "Administrator"
+                              ? "The Administrator role cannot be changed"
+                              : canWrite
+                                ? "Edit role"
+                                : "Requires roles:write"}
                           </TooltipContent>
                         </Tooltip>
 

@@ -214,3 +214,41 @@ async def test_admin_can_reset_a_password(
         json={"email": "new.hire@example.com", "password": "ResetPass1!"},
     )
     assert login.status_code == 200
+
+
+async def test_only_an_administrator_may_reset_a_password(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    manager_headers: dict[str, str],
+    seeded: SimpleNamespace,
+) -> None:
+    """users:write is not enough — resetting a password needs users:reset_password."""
+    created = await client.post(USERS, headers=auth_headers, json=_new_user_payload(seeded))
+    user_id = created.json()["id"]
+
+    denied = await client.post(
+        f"{USERS}/{user_id}/password",
+        headers=manager_headers,
+        json={"password": "ResetPass1!"},
+    )
+
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "insufficient_permissions"
+
+
+async def test_the_administrator_role_can_reset_a_password(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    login_as: Any,
+    administrator: User,
+    seeded: SimpleNamespace,
+) -> None:
+    created = await client.post(USERS, headers=auth_headers, json=_new_user_payload(seeded))
+    user_id = created.json()["id"]
+
+    headers = await login_as(administrator.email, "ManagerPass1!")
+    response = await client.post(
+        f"{USERS}/{user_id}/password", headers=headers, json={"password": "ResetPass1!"}
+    )
+
+    assert response.status_code == 200

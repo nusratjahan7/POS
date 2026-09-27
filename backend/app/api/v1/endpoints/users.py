@@ -90,7 +90,8 @@ async def update_user(
 @router.post(
     "/{user_id}/password",
     response_model=Message,
-    dependencies=[Depends(require_permissions(PermissionCode.USERS_WRITE))],
+    summary="Reset another user's password",
+    dependencies=[Depends(require_permissions(PermissionCode.USERS_RESET_PASSWORD))],
 )
 async def set_user_password(
     session: SessionDep,

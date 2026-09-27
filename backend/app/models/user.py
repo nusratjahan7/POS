@@ -8,6 +8,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.permissions import ADMINISTRATOR_ROLE_NAME
 from app.db.base import Base
 from app.db.mixins import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.associations import user_roles
@@ -74,6 +75,17 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
         if self.is_superuser:
             return True
         return code in self.permission_codes()
+
+    @property
+    def is_administrator(self) -> bool:
+        """A superuser, or the holder of the built-in Administrator role.
+
+        The single definition used by the password-protection guards, so the
+        rule lives in exactly one place.
+        """
+        if self.is_superuser:
+            return True
+        return any(role.name == ADMINISTRATOR_ROLE_NAME for role in self.roles)
 
     def is_usable(self) -> bool:
         return self.is_active and not self.is_deleted

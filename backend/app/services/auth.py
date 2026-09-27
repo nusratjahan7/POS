@@ -14,6 +14,7 @@ from functools import lru_cache
 import anyio
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import audit
 from app.core.config import settings
 from app.core.exceptions import (
     BadRequestError,
@@ -152,6 +153,7 @@ class AuthService:
         if not await anyio.to_thread.run_sync(
             verify_password, current_password, user.hashed_password
         ):
+            audit("password.change_denied", user_id=str(user.id), reason="invalid_current_password")
             raise BadRequestError("Current password is incorrect.", code="invalid_current_password")
         if await anyio.to_thread.run_sync(verify_password, new_password, user.hashed_password):
             raise BadRequestError(
@@ -163,6 +165,7 @@ class AuthService:
         # Every other session is invalidated as a security precaution.
         await self.tokens.revoke_all_for_user(user.id)
         await self.session.commit()
+        audit("password.changed", user_id=str(user.id))
 
     # --- Password reset ----------------------------------------------------
     async def request_password_reset(
@@ -179,6 +182,13 @@ class AuthService:
         """
         user = await self.users.get_by_email(email)
         if user is None or not user.is_usable():
+            return None
+
+        # Administrator accounts are not eligible for the emailed reset link:
+        # their password may only be changed with the current password. Answered
+        # exactly like an unknown email, so this is not an enumeration oracle.
+        if user.is_administrator:
+            audit("password.reset_token_suppressed", user_id=str(user.id))
             return None
 
         # Supersede any link that is still outstanding.
@@ -228,6 +238,15 @@ class AuthService:
                 "This password reset link is no longer valid.", code="invalid_reset_token"
             )
 
+        # Defence in depth: no token is ever minted for an Administrator, but a
+        # pre-existing token must not be able to change one's password either.
+        if user.is_administrator:
+            audit("password.reset_denied", user_id=str(user.id), reason="administrator_protected")
+            raise BadRequestError(
+                "An Administrator's password can only be changed by that Administrator.",
+                code="administrator_password_protected",
+            )
+
         if await anyio.to_thread.run_sync(verify_password, new_password, user.hashed_password):
             raise BadRequestError(
                 "The new password must differ from the current one.",
@@ -241,6 +260,7 @@ class AuthService:
         # A reset is recovery from a possible compromise, so end every session.
         await self.tokens.revoke_all_for_user(user.id)
         await self.session.commit()
+        audit("password.reset_token_used", user_id=str(user.id))
         return user
 
     # --- Internals ---------------------------------------------------------

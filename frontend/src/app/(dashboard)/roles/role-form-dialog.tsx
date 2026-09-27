@@ -34,6 +34,8 @@ type RoleFormDialogProps = {
  */
 export function RoleFormDialog({ role, catalog, onClose, onSaved }: RoleFormDialogProps) {
   const isSystem = role?.is_system ?? false;
+  // The Administrator role is fully locked: nobody may change it.
+  const isProtected = role?.name === "Administrator";
 
   const [name, setName] = React.useState(role?.name ?? "");
   const [description, setDescription] = React.useState(role?.description ?? "");
@@ -96,7 +98,9 @@ export function RoleFormDialog({ role, catalog, onClose, onSaved }: RoleFormDial
         <DialogHeader>
           <DialogTitle>{role ? `Edit ${role.name}` : "New role"}</DialogTitle>
           <DialogDescription>
-            Every tick grants one capability that the API enforces independently of this screen.
+            {isProtected
+              ? "The Administrator role is owned by the application and cannot be changed."
+              : "Every tick grants one capability that the API enforces independently of this screen."}
           </DialogDescription>
         </DialogHeader>
 
@@ -143,7 +147,7 @@ export function RoleFormDialog({ role, catalog, onClose, onSaved }: RoleFormDial
                 permissions={catalog}
                 value={codes}
                 onChange={setCodes}
-                disabled={saving}
+                disabled={saving || isProtected}
               />
             </div>
           </div>
@@ -152,7 +156,7 @@ export function RoleFormDialog({ role, catalog, onClose, onSaved }: RoleFormDial
             <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || isProtected}>
               {saving ? <Spinner /> : null}
               {role ? "Save changes" : "Create role"}
             </Button>

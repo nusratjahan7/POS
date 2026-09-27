@@ -28,8 +28,11 @@ INVENTORY_MANAGER_PERMISSIONS = {
     "catalog:read",
     "inventory:read",
     "inventory:adjust",
+    "suppliers:read",
+    "suppliers:write",
     "purchases:view",
     "purchases:create",
+    "purchases:update",
     "reports:view",
 }
 
