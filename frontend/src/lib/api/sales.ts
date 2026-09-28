@@ -96,6 +96,14 @@ export type SaleReceipt = {
     currency: string;
     tax_label: string;
   };
+  /** The branch the sale happened at, with the contact details a receipt shows. */
+  branch: {
+    id: string;
+    name: string;
+    code: string;
+    address: string | null;
+    phone: string | null;
+  };
   sale: Sale;
 };
 

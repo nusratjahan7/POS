@@ -100,7 +100,7 @@ class SaleService:
             raise NotFoundError(
                 "The business profile is not configured yet.", code="business_not_configured"
             )
-        return {"business": business, "sale": sale}
+        return {"business": business, "branch": sale.branch, "sale": sale}
 
     # --- Internals ---------------------------------------------------------
     async def _unique_number(self) -> str:

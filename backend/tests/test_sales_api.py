@@ -438,6 +438,11 @@ async def test_the_receipt_bundles_the_sale_and_the_business(
     assert receipt["sale"]["items"][0]["product_name"] == "Beans"
     assert receipt["business"]["name"]
     assert receipt["business"]["currency"]
+    # The branch travels with its contact details so a receipt can print them.
+    assert receipt["branch"]["id"] == str(seeded.branch.id)
+    assert receipt["branch"]["name"] == seeded.branch.name
+    assert "address" in receipt["branch"]
+    assert "phone" in receipt["branch"]
 
 
 async def test_customer_details_now_show_their_sales(

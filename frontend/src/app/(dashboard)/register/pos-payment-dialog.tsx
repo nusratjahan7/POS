@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, CircleAlert, Plus, Printer, Trash2 } from "lucide-react";
+import { CheckCircle2, CircleAlert, FileText, Plus, Receipt, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { InvoicePreviewDialog } from "@/components/invoice/invoice-preview-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,7 +28,7 @@ import { describeError } from "@/lib/api/client";
 import { salesApi, type Sale } from "@/lib/api/sales";
 import { paymentMethodsApi, type PaymentMethodOption } from "@/lib/api/settings";
 import type { CartLine, CartTotals, PosCustomer } from "@/lib/pos/cart-store";
-import { printReceipt } from "@/lib/pos/receipt";
+import type { InvoiceVariant } from "@/lib/invoice/styles";
 import { formatMoney, formatQuantity } from "@/lib/format";
 
 /** One tender line: which method, how much of the sale it settles, and its detail. */
@@ -77,7 +78,8 @@ export function PosPaymentDialog({
   const [note, setNote] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [completed, setCompleted] = React.useState<Sale | null>(null);
-  const [printing, setPrinting] = React.useState(false);
+  // Which invoice layout to preview once the sale is done; null keeps it closed.
+  const [invoiceVariant, setInvoiceVariant] = React.useState<InvoiceVariant | null>(null);
 
   const methodById = React.useMemo(() => {
     const map = new Map<string, PaymentMethodOption>();
@@ -187,87 +189,92 @@ export function PosPaymentDialog({
     },
   });
 
-  async function handlePrint() {
-    if (!completed) return;
-    setPrinting(true);
-    try {
-      const receipt = await salesApi.receipt(completed.id);
-      if (!printReceipt(receipt)) {
-        toast.error("Your browser blocked the receipt window. Allow pop-ups and try again.");
-      }
-    } catch (cause) {
-      toast.error(describeError(cause));
-    } finally {
-      setPrinting(false);
-    }
-  }
-
   // --- Success: the sale is committed, the invoice number stays on screen -----
   if (completed) {
     return (
-      <Dialog open onOpenChange={(next) => !next && onClose()}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="text-success size-5" aria-hidden />
-              Payment complete
-            </DialogTitle>
-            <DialogDescription>
-              Hand back any change, then start the next sale.
-            </DialogDescription>
-          </DialogHeader>
+      <>
+        <Dialog open onOpenChange={(next) => !next && onClose()}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CheckCircle2 className="text-success size-5" aria-hidden />
+                Payment complete
+              </DialogTitle>
+              <DialogDescription>
+                Hand back any change, then start the next sale.
+              </DialogDescription>
+            </DialogHeader>
 
-          <div className="flex flex-col gap-2 rounded-md border p-3">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground text-sm">Invoice</span>
-              <span className="font-mono text-sm font-semibold">{completed.sale_number}</span>
-            </div>
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-muted-foreground">Items</span>
-              <span className="tabular-nums">
-                {formatQuantity(
-                  completed.items.reduce((sum, item) => sum + Number(item.quantity), 0),
-                )}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-muted-foreground">Total</span>
-              <span className="tabular-nums">{money(Number(completed.total), currency)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-muted-foreground">Paid</span>
-              <span className="tabular-nums">{money(Number(completed.paid), currency)}</span>
-            </div>
-            {Number(completed.change_amount) > 0 ? (
-              <div className="flex items-center justify-between gap-3 border-t pt-2 text-base font-semibold">
-                <span>Change</span>
+            <div className="flex flex-col gap-2 rounded-md border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground text-sm">Invoice</span>
+                <span className="font-mono text-sm font-semibold">{completed.sale_number}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">Items</span>
                 <span className="tabular-nums">
-                  {money(Number(completed.change_amount), currency)}
+                  {formatQuantity(
+                    completed.items.reduce((sum, item) => sum + Number(item.quantity), 0),
+                  )}
                 </span>
               </div>
-            ) : null}
-            {Number(completed.due) > 0 ? (
-              <div className="text-warning flex items-start gap-2 border-t pt-2 text-sm">
-                <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-                <span>
-                  {money(Number(completed.due), currency)} is on{" "}
-                  {completed.customer?.name ?? "the customer"}&apos;s account.
-                </span>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">Total</span>
+                <span className="tabular-nums">{money(Number(completed.total), currency)}</span>
               </div>
-            ) : null}
-          </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">Paid</span>
+                <span className="tabular-nums">{money(Number(completed.paid), currency)}</span>
+              </div>
+              {Number(completed.change_amount) > 0 ? (
+                <div className="flex items-center justify-between gap-3 border-t pt-2 text-base font-semibold">
+                  <span>Change</span>
+                  <span className="tabular-nums">
+                    {money(Number(completed.change_amount), currency)}
+                  </span>
+                </div>
+              ) : null}
+              {Number(completed.due) > 0 ? (
+                <div className="text-warning flex items-start gap-2 border-t pt-2 text-sm">
+                  <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                  <span>
+                    {money(Number(completed.due), currency)} is on{" "}
+                    {completed.customer?.name ?? "the customer"}&apos;s account.
+                  </span>
+                </div>
+              ) : null}
+            </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => void handlePrint()} disabled={printing}>
-              <Printer className="size-4" />
-              {printing ? "Preparing…" : "Print receipt"}
-            </Button>
-            <Button type="button" onClick={onClose}>
-              New sale
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter className="sm:justify-between">
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setInvoiceVariant("thermal")}
+                >
+                  <Receipt className="size-4" />
+                  Thermal receipt
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setInvoiceVariant("a4")}>
+                  <FileText className="size-4" />
+                  A4 invoice
+                </Button>
+              </div>
+              <Button type="button" onClick={onClose}>
+                New sale
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {invoiceVariant ? (
+          <InvoicePreviewDialog
+            saleId={completed.id}
+            defaultVariant={invoiceVariant}
+            onClose={() => setInvoiceVariant(null)}
+          />
+        ) : null}
+      </>
     );
   }
 

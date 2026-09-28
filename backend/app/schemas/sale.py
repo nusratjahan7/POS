@@ -135,8 +135,20 @@ class SaleBusiness(ORMModel):
     tax_label: str
 
 
+class SaleBranch(ORMModel):
+    """The branch a sale happened at, with the contact details a receipt shows."""
+
+    id: uuid.UUID
+    name: str
+    code: str
+    address: str | None
+    phone: str | None
+
+
 class SaleReceipt(BaseModel):
     """Everything a printable receipt needs, in one call."""
 
     business: SaleBusiness
+    #: The receipt's branch, enriched beyond `SaleRead.branch` with address/phone.
+    branch: SaleBranch
     sale: SaleRead

@@ -10,6 +10,7 @@ import { PosDiscountDialog, PosHeldListDialog, PosHoldDialog } from "@/app/(dash
 import { PosCustomerDialog } from "@/app/(dashboard)/register/pos-customer-dialog";
 import { PosPaymentDialog } from "@/app/(dashboard)/register/pos-payment-dialog";
 import { PosProductGrid } from "@/app/(dashboard)/register/pos-product-grid";
+import { InvoicePreviewDialog } from "@/components/invoice/invoice-preview-dialog";
 import { useCan } from "@/components/auth/can";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,12 +25,10 @@ import {
 } from "@/components/ui/select";
 import { posApi, type PosProduct } from "@/lib/api/pos";
 import { branchesApi } from "@/lib/api/rbac";
-import { salesApi, type Sale } from "@/lib/api/sales";
+import { type Sale } from "@/lib/api/sales";
 import { businessApi } from "@/lib/api/settings";
-import { describeError } from "@/lib/api/client";
 import { computeTotals, useCartStore, type SyncResult } from "@/lib/pos/cart-store";
 import { usePosSettings } from "@/lib/pos/settings-store";
-import { printReceipt } from "@/lib/pos/receipt";
 import {
   configureSound,
   initAudio,
@@ -115,6 +114,7 @@ export function RegisterClient() {
   const [heldOpen, setHeldOpen] = React.useState(false);
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
   const [lastSale, setLastSale] = React.useState<Sale | null>(null);
+  const [invoiceSale, setInvoiceSale] = React.useState<Sale | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -280,18 +280,6 @@ export function RegisterClient() {
     void queryClient.invalidateQueries({ queryKey: ["pos", "catalog"] });
     void queryClient.invalidateQueries({ queryKey: ["pos", "categories"] });
     void queryClient.invalidateQueries({ queryKey: ["customers"] });
-  }
-
-  async function printLastReceipt() {
-    if (!lastSale) return;
-    try {
-      const receipt = await salesApi.receipt(lastSale.id);
-      if (!printReceipt(receipt)) {
-        toast.error("Your browser blocked the receipt window. Allow pop-ups and try again.");
-      }
-    } catch (cause) {
-      toast.error(describeError(cause));
-    }
   }
 
   function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -495,7 +483,7 @@ export function RegisterClient() {
               variant="ghost"
               size="sm"
               className="shrink-0"
-              onClick={() => void printLastReceipt()}
+              onClick={() => setInvoiceSale(lastSale)}
             >
               <Printer className="size-3.5" />
               Receipt
@@ -568,6 +556,10 @@ export function RegisterClient() {
           onClose={() => setCheckoutOpen(false)}
           onComplete={handleSaleComplete}
         />
+      ) : null}
+
+      {invoiceSale ? (
+        <InvoicePreviewDialog saleId={invoiceSale.id} onClose={() => setInvoiceSale(null)} />
       ) : null}
     </div>
   );
