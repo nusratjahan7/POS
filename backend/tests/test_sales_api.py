@@ -494,3 +494,229 @@ async def test_the_sale_endpoints_need_the_right_permission(
     forbidden = await client.get(SALES, headers=inventory_manager_headers)
     assert forbidden.status_code == 403
     assert forbidden.json()["error"]["code"] == "insufficient_permissions"
+
+
+# ---------------------------------------------------------------------------
+# MODULE 13 — management list: item count, filtering and sorting
+# ---------------------------------------------------------------------------
+async def test_the_list_reports_item_count_and_filters_by_payment_status(
+    client: AsyncClient, auth_headers: dict[str, str], seeded: Any
+) -> None:
+    beans = await _product(
+        client, auth_headers, name="Beans", sku="BEAN-1", selling_price="2.00", opening_stock="20"
+    )
+    rice = await _product(
+        client, auth_headers, name="Rice", sku="RICE-1", selling_price="1.00", opening_stock="20"
+    )
+    customer = await _customer(client, auth_headers, name="Credit Customer")
+
+    settled = await _sell(
+        client,
+        auth_headers,
+        seeded.branch.id,
+        items=[
+            {"product_id": beans["id"], "quantity": "1"},
+            {"product_id": rice["id"], "quantity": "1"},
+        ],
+        payments=[_cash(seeded.payment_methods, "3.00")],
+    )
+    on_account = await _sell(
+        client,
+        auth_headers,
+        seeded.branch.id,
+        items=[{"product_id": beans["id"], "quantity": "3"}],
+        payments=[_cash(seeded.payment_methods, "2.00")],
+        customer_id=customer["id"],
+    )
+    assert settled.status_code == 201 and on_account.status_code == 201
+    settled_id = settled.json()["id"]
+    on_account_id = on_account.json()["id"]
+
+    listed = await client.get(SALES, headers=auth_headers)
+    rows = {row["id"]: row for row in listed.json()["items"]}
+    assert rows[settled_id]["item_count"] == 2
+    assert rows[on_account_id]["item_count"] == 1
+
+    partial = await client.get(SALES, headers=auth_headers, params={"payment_status": "partial"})
+    assert [row["id"] for row in partial.json()["items"]] == [on_account_id]
+
+    paid = await client.get(SALES, headers=auth_headers, params={"payment_status": "paid"})
+    paid_ids = [row["id"] for row in paid.json()["items"]]
+    assert settled_id in paid_ids
+    assert on_account_id not in paid_ids
+
+
+async def test_the_list_searches_by_invoice_and_sorts(
+    client: AsyncClient, auth_headers: dict[str, str], seeded: Any
+) -> None:
+    product = await _product(
+        client, auth_headers, name="Beans", sku="BEAN-1", selling_price="1.00", opening_stock="50"
+    )
+
+    small = (
+        await _sell(
+            client,
+            auth_headers,
+            seeded.branch.id,
+            items=[{"product_id": product["id"], "quantity": "1"}],
+            payments=[_cash(seeded.payment_methods, "1.00")],
+        )
+    ).json()
+    big = (
+        await _sell(
+            client,
+            auth_headers,
+            seeded.branch.id,
+            items=[{"product_id": product["id"], "quantity": "10"}],
+            payments=[_cash(seeded.payment_methods, "10.00")],
+        )
+    ).json()
+
+    found = await client.get(SALES, headers=auth_headers, params={"search": small["sale_number"]})
+    assert [row["id"] for row in found.json()["items"]] == [small["id"]]
+
+    by_total = await client.get(SALES, headers=auth_headers, params={"sort": "-total"})
+    assert by_total.json()["items"][0]["id"] == big["id"]
+
+
+# ---------------------------------------------------------------------------
+# MODULE 13 — refund: one reversal transaction
+# ---------------------------------------------------------------------------
+async def test_a_refund_restocks_the_sale_and_marks_it_refunded(
+    client: AsyncClient, auth_headers: dict[str, str], seeded: Any
+) -> None:
+    product = await _product(
+        client, auth_headers, name="Beans", sku="BEAN-1", selling_price="2.00", opening_stock="10"
+    )
+    sale_id = (
+        await _sell(
+            client,
+            auth_headers,
+            seeded.branch.id,
+            items=[{"product_id": product["id"], "quantity": "3"}],
+            payments=[_cash(seeded.payment_methods, "6.00")],
+        )
+    ).json()["id"]
+    assert await _stock(client, auth_headers, seeded.branch.id, product["id"]) == "7.000"
+
+    response = await client.post(
+        f"{SALES}/{sale_id}/refund", headers=auth_headers, json={"reason": "Damaged"}
+    )
+
+    assert response.status_code == 200, response.text
+    refunded = response.json()
+    assert refunded["status"] == "refunded"
+    assert refunded["refund_reason"] == "Damaged"
+    assert refunded["refunded_at"] is not None
+    assert refunded["refunded_by"]["full_name"] == "Test Administrator"
+    # The sale's own figures are history and are not rewritten.
+    assert refunded["total"] == "6.00"
+    assert refunded["paid"] == "6.00"
+
+    assert await _stock(client, auth_headers, seeded.branch.id, product["id"]) == "10.000"
+
+    movements = await client.get(
+        MOVEMENTS, headers=auth_headers, params={"product_id": product["id"]}
+    )
+    rows = [row for row in movements.json()["items"] if row["reference_id"] == sale_id]
+    returns = [row for row in rows if row["movement_type"] == "return"]
+    assert len(returns) == 1
+    assert returns[0]["quantity"] == "3.000"
+    assert returns[0]["reference_type"] == "sale"
+
+
+async def test_refunding_a_sale_on_account_clears_the_balance(
+    client: AsyncClient, auth_headers: dict[str, str], seeded: Any
+) -> None:
+    product = await _product(client, auth_headers, selling_price="2.00", opening_stock="5")
+    customer = await _customer(client, auth_headers, name="Credit Customer")
+    sale_id = (
+        await _sell(
+            client,
+            auth_headers,
+            seeded.branch.id,
+            items=[{"product_id": product["id"], "quantity": "3"}],
+            payments=[_cash(seeded.payment_methods, "2.00")],
+            customer_id=customer["id"],
+        )
+    ).json()["id"]
+    owing = await client.get(f"{CUSTOMERS}/{customer['id']}", headers=auth_headers)
+    assert owing.json()["balance"] == "4.00"
+
+    response = await client.post(
+        f"{SALES}/{sale_id}/refund", headers=auth_headers, json={"reason": "Returned"}
+    )
+
+    assert response.status_code == 200, response.text
+    cleared = await client.get(f"{CUSTOMERS}/{customer['id']}", headers=auth_headers)
+    assert cleared.json()["balance"] == "0.00"
+
+
+async def test_a_sale_cannot_be_refunded_twice(
+    client: AsyncClient, auth_headers: dict[str, str], seeded: Any
+) -> None:
+    product = await _product(client, auth_headers, selling_price="2.00", opening_stock="5")
+    sale_id = (
+        await _sell(
+            client,
+            auth_headers,
+            seeded.branch.id,
+            items=[{"product_id": product["id"], "quantity": "1"}],
+            payments=[_cash(seeded.payment_methods, "2.00")],
+        )
+    ).json()["id"]
+
+    first = await client.post(f"{SALES}/{sale_id}/refund", headers=auth_headers, json={})
+    assert first.status_code == 200, first.text
+
+    second = await client.post(f"{SALES}/{sale_id}/refund", headers=auth_headers, json={})
+    assert second.status_code == 409, second.text
+    assert second.json()["error"]["code"] == "sale_not_refundable"
+    # Restocked exactly once.
+    assert await _stock(client, auth_headers, seeded.branch.id, product["id"]) == "5.000"
+
+
+async def test_refunding_needs_the_refund_permission(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    cashier_headers: dict[str, str],
+    seeded: Any,
+) -> None:
+    product = await _product(client, auth_headers, selling_price="2.00", opening_stock="5")
+    sale_id = (
+        await _sell(
+            client,
+            cashier_headers,
+            seeded.branch.id,
+            items=[{"product_id": product["id"], "quantity": "1"}],
+            payments=[_cash(seeded.payment_methods, "2.00")],
+        )
+    ).json()["id"]
+
+    forbidden = await client.post(f"{SALES}/{sale_id}/refund", headers=cashier_headers, json={})
+    assert forbidden.status_code == 403, forbidden.text
+    assert forbidden.json()["error"]["code"] == "insufficient_permissions"
+
+    unchanged = await client.get(f"{SALES}/{sale_id}", headers=auth_headers)
+    assert unchanged.json()["status"] == "completed"
+
+
+async def test_the_filter_lists_only_cashiers_who_have_sales(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    superuser: Any,
+    seeded: Any,
+) -> None:
+    product = await _product(client, auth_headers, selling_price="2.00", opening_stock="5")
+    await _sell(
+        client,
+        auth_headers,
+        seeded.branch.id,
+        items=[{"product_id": product["id"], "quantity": "1"}],
+        payments=[_cash(seeded.payment_methods, "2.00")],
+    )
+
+    response = await client.get(f"{SALES}/cashiers", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == [{"id": str(superuser.id), "full_name": "Test Administrator"}]

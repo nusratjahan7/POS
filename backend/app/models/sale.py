@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 MONEY = Numeric(12, 2)
 
 # Keep in lock-step with the CHECK constraint and the API literals.
-SALE_STATUSES = ("completed", "voided")
+SALE_STATUSES = ("completed", "voided", "refunded")
 _STATUSES_SQL = ", ".join(f"'{value}'" for value in SALE_STATUSES)
 
 
@@ -110,10 +110,23 @@ class Sale(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Set when a completed sale is refunded. The original figures (total, paid,
+    # due) are never rewritten — a refund is a reversal *of* the sale, recorded
+    # here and in the stock ledger, not an edit of history.
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    refunded_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    refund_reason: Mapped[str | None] = mapped_column(String(255))
+
     branch: Mapped[Branch] = relationship(lazy="joined")
     register: Mapped[Register | None] = relationship(lazy="joined")
     customer: Mapped[Customer | None] = relationship(lazy="joined")
-    cashier: Mapped[User | None] = relationship(lazy="joined")
+    cashier: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[cashier_id])
+    refunded_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[refunded_by_id])
     items: Mapped[list[SaleItem]] = relationship(
         back_populates="sale",
         cascade="all, delete-orphan",
@@ -124,6 +137,15 @@ class Sale(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+
+    @property
+    def item_count(self) -> int:
+        """How many product lines the sale carries.
+
+        ``items`` is eager-loaded (``selectin``), so this costs no extra query for
+        a page of sales and needs no denormalised column.
+        """
+        return len(self.items)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Sale {self.sale_number} {self.total}>"

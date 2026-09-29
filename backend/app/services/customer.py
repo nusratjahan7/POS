@@ -184,6 +184,25 @@ class CustomerService:
             .values(balance=Customer.balance + amount)
         )
 
+    async def reverse_credit(self, customer_id: uuid.UUID, amount: Decimal) -> None:
+        """Take a refunded sale's carried balance back off the customer.
+
+        The mirror of :meth:`charge_credit`, and likewise does **not** commit — the
+        sales module calls it inside the refund transaction. The balance may fall
+        below zero, which reads as store credit owed to the customer: the honest
+        result when a sale is refunded after they had already paid it off.
+        """
+        if amount <= 0:
+            raise UnprocessableError(
+                "A credit reversal must be a positive amount.", code="invalid_credit_amount"
+            )
+        await self.get_or_404(customer_id)
+        await self.session.execute(
+            update(Customer)
+            .where(Customer.id == customer_id)
+            .values(balance=Customer.balance - amount)
+        )
+
     # --- Internals ---------------------------------------------------------
     async def _reload_payment(self, payment_id: uuid.UUID) -> CustomerPayment:
         stmt = select(CustomerPayment).where(CustomerPayment.id == payment_id)

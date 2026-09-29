@@ -17,7 +17,16 @@ from app.api.deps import CurrentUser, Pagination, SessionDep, require_permission
 from app.core.permissions import PermissionCode
 from app.repositories.sale import SaleRepository
 from app.schemas.common import Page
-from app.schemas.sale import SaleCreate, SaleRead, SaleReceipt, SaleStatus, SaleSummary
+from app.schemas.sale import (
+    PaymentStatus,
+    SaleCashierOption,
+    SaleCreate,
+    SaleRead,
+    SaleReceipt,
+    SaleRefundRequest,
+    SaleStatus,
+    SaleSummary,
+)
 from app.services.sale import SaleService
 from app.utils.sorting import parse_sort
 
@@ -49,6 +58,9 @@ async def list_sales(
     customer_id: Annotated[uuid.UUID | None, Query()] = None,
     cashier_id: Annotated[uuid.UUID | None, Query()] = None,
     sale_status: Annotated[SaleStatus | None, Query(alias="status")] = None,
+    payment_status: Annotated[
+        PaymentStatus | None, Query(description="paid | partial | unpaid")
+    ] = None,
     date_from: Annotated[date | None, Query(description="Sold on or after")] = None,
     date_to: Annotated[date | None, Query(description="Sold on or before")] = None,
     sort: Annotated[str | None, Query(description="e.g. -sold_at, -total")] = None,
@@ -61,6 +73,7 @@ async def list_sales(
         customer_id=customer_id,
         cashier_id=cashier_id,
         status=sale_status,
+        payment_status=payment_status,
         date_from=date_from,
         date_to=date_to,
     )
@@ -73,12 +86,39 @@ async def list_sales(
 
 
 @router.get(
+    "/cashiers",
+    response_model=list[SaleCashierOption],
+    summary="Cashiers who have sales, for the management screen's filter",
+    dependencies=[Depends(require_permissions(PermissionCode.SALES_READ))],
+)
+async def list_sale_cashiers(session: SessionDep) -> list[SaleCashierOption]:
+    rows = await SaleService(session).list_cashiers()
+    return [SaleCashierOption(id=cashier_id, full_name=full_name) for cashier_id, full_name in rows]
+
+
+@router.get(
     "/{sale_id}",
     response_model=SaleRead,
     dependencies=[Depends(require_permissions(PermissionCode.SALES_READ))],
 )
 async def get_sale(session: SessionDep, sale_id: uuid.UUID) -> SaleRead:
     return SaleRead.model_validate(await SaleService(session).get_or_404(sale_id))
+
+
+@router.post(
+    "/{sale_id}/refund",
+    response_model=SaleRead,
+    summary="Refund a sale (restock it, unwind any credit, mark it refunded)",
+    dependencies=[Depends(require_permissions(PermissionCode.SALES_REFUND))],
+)
+async def refund_sale(
+    session: SessionDep,
+    actor: CurrentUser,
+    sale_id: uuid.UUID,
+    payload: SaleRefundRequest,
+) -> SaleRead:
+    sale = await SaleService(session).refund(sale_id, reason=payload.reason, actor_id=actor.id)
+    return SaleRead.model_validate(sale)
 
 
 @router.get(

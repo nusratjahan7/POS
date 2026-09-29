@@ -94,6 +94,7 @@ export function InvoiceDocument({ receipt, variant, className, ...props }: Invoi
           <div className="inv-doc-title">{variant === "a4" ? "Invoice" : "Receipt"}</div>
           <div className="inv-doc-number">{sale.sale_number}</div>
           {sale.status === "voided" ? <div className="inv-doc-state">Voided</div> : null}
+          {sale.status === "refunded" ? <div className="inv-doc-state">Refunded</div> : null}
         </div>
       </header>
 

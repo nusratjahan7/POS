@@ -15,7 +15,10 @@ Money = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
 PositiveMoney = Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=2)]
 Quantity = Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=3)]
 
-SaleStatus = Literal["completed", "voided"]
+SaleStatus = Literal["completed", "voided", "refunded"]
+
+#: Settlement state, derived from ``paid``/``due`` — never stored.
+PaymentStatus = Literal["paid", "partial", "unpaid"]
 
 
 class SaleItemCreate(BaseModel):
@@ -48,6 +51,12 @@ class SaleCreate(BaseModel):
     order_discount: Money = Decimal("0")
     items: list[SaleItemCreate] = Field(min_length=1)
     payments: list[SalePaymentCreate] = Field(min_length=1)
+
+
+class SaleRefundRequest(BaseModel):
+    """A full-sale reversal. The reason is recorded on the sale for the audit trail."""
+
+    reason: str | None = Field(default=None, max_length=255)
 
 
 class SaleItemRead(ORMModel):
@@ -86,6 +95,17 @@ class SaleUser(ORMModel):
     full_name: str
 
 
+class SaleCashierOption(ORMModel):
+    """A cashier who has rung up at least one sale — the management filter's list.
+
+    Deliberately its own shape rather than the staff directory, so the sales
+    screen does not depend on the ``users:read`` permission.
+    """
+
+    id: uuid.UUID
+    full_name: str
+
+
 class SaleSummary(ORMModel):
     id: uuid.UUID
     sale_number: str
@@ -101,6 +121,8 @@ class SaleSummary(ORMModel):
     due: Decimal
     change_amount: Decimal
     status: str
+    #: Distinct product lines; eager-loaded, so the list costs no extra query.
+    item_count: int
 
 
 class SaleRead(ORMModel):
@@ -123,6 +145,9 @@ class SaleRead(ORMModel):
     payments: list[SalePaymentRead]
     sold_at: datetime
     created_at: datetime
+    refunded_at: datetime | None
+    refunded_by: SaleUser | None
+    refund_reason: str | None
 
 
 class SaleBusiness(ORMModel):

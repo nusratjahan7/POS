@@ -66,6 +66,9 @@ const receipt: SaleReceipt = {
     ],
     sold_at: "2026-01-01T10:30:00Z",
     created_at: "2026-01-01T10:30:00Z",
+    refunded_at: null,
+    refunded_by: null,
+    refund_reason: null,
   },
 };
 

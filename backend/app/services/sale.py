@@ -92,6 +92,10 @@ class SaleService:
     ) -> tuple[Sequence[Sale], int]:
         return await self.sales.list_sales(params, sort=sort, **filters)
 
+    async def list_cashiers(self) -> Sequence[tuple[uuid.UUID, str]]:
+        """Cashiers who have sales, for the management screen's filter."""
+        return await self.sales.cashiers()
+
     async def receipt(self, sale_id: uuid.UUID) -> dict[str, Any]:
         """A sale plus the business details a printed receipt needs."""
         sale = await self.get_or_404(sale_id)
@@ -377,6 +381,62 @@ class SaleService:
             # Staged, not committed — it lands with this sale or not at all.
             if due > 0 and customer is not None:
                 await self.credit.charge_credit(customer.id, due)
+
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            raise
+
+        return await self._reload(sale.id)
+
+    async def refund(
+        self,
+        sale_id: uuid.UUID,
+        *,
+        reason: str | None = None,
+        actor_id: uuid.UUID | None = None,
+    ) -> Sale:
+        """Reverse a completed sale: restock it, unwind any credit, mark it refunded.
+
+        One transaction, the mirror of :meth:`create`. Every unit goes back to the
+        branch it left, each with a ``return`` movement so the ledger still
+        explains the stock; anything carried on the customer's account is taken
+        back off it. The sale's own figures are left untouched — the reversal is
+        recorded *beside* the sale, never by rewriting its history.
+
+        Only a ``completed`` sale can be refunded, so a double refund is refused
+        rather than restocking twice.
+        """
+        sale = await self.get_or_404(sale_id)
+        if sale.status != "completed":
+            raise ConflictError(
+                f"This sale is already {sale.status}.",
+                code="sale_not_refundable",
+            )
+
+        try:
+            # Products come back in the same lock order a sale takes them, so a
+            # refund and a till selling the same goods cannot deadlock.
+            for item in sorted(sale.items, key=lambda row: row.product_id):
+                await self.inventory.apply_movement(
+                    product_id=item.product_id,
+                    branch_id=sale.branch_id,
+                    quantity=item.quantity,
+                    movement_type="return",
+                    reference_type="sale",
+                    reference_id=sale.id,
+                    user_id=actor_id,
+                    note=f"Refund on {sale.sale_number}",
+                )
+
+            # The part that was carried on account is no longer owed.
+            if sale.due > 0 and sale.customer_id is not None:
+                await self.credit.reverse_credit(sale.customer_id, sale.due)
+
+            sale.status = "refunded"
+            sale.refunded_at = datetime.now(UTC)
+            sale.refunded_by_id = actor_id
+            sale.refund_reason = (reason or "").strip() or None
 
             await self.session.commit()
         except Exception:

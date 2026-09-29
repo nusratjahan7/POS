@@ -78,12 +78,15 @@ export type Sale = {
   paid: string;
   due: string;
   change_amount: string;
-  status: string;
+  status: SaleStatus;
   note: string | null;
   items: SaleItem[];
   payments: SalePayment[];
   sold_at: string;
   created_at: string;
+  refunded_at: string | null;
+  refunded_by: { id: string; full_name: string } | null;
+  refund_reason: string | null;
 };
 
 export type SaleReceipt = {
@@ -107,13 +110,56 @@ export type SaleReceipt = {
   sale: Sale;
 };
 
+export type SaleStatus = "completed" | "voided" | "refunded";
+
+/** Settlement state, derived server-side from `paid`/`due`. */
+export type PaymentStatus = "paid" | "partial" | "unpaid";
+
+/** A sale row as the management list returns it — no line items or tenders. */
+export type SaleSummary = {
+  id: string;
+  sale_number: string;
+  branch: { id: string; name: string; code: string };
+  customer: { id: string; name: string; balance: string } | null;
+  cashier: { id: string; full_name: string } | null;
+  sold_at: string;
+  subtotal: string;
+  discount: string;
+  tax: string;
+  total: string;
+  paid: string;
+  due: string;
+  change_amount: string;
+  status: SaleStatus;
+  item_count: number;
+};
+
+/** A cashier who has sales — the management screen's cashier filter. */
+export type SaleCashierOption = {
+  id: string;
+  full_name: string;
+};
+
+export type SaleRefundPayload = {
+  reason?: string | null;
+};
+
 export type SaleListParams = {
   page?: number;
   page_size?: number;
+  /** Invoice number. */
   search?: string;
   branch_id?: string;
   customer_id?: string;
-  status?: string;
+  cashier_id?: string;
+  status?: SaleStatus;
+  payment_status?: PaymentStatus;
+  /** ISO `YYYY-MM-DD`, sold on or after. */
+  date_from?: string;
+  /** ISO `YYYY-MM-DD`, sold on or before. */
+  date_to?: string;
+  /** `field` or `-field` (descending): sale_number, sold_at, total, paid, due. */
+  sort?: string;
 };
 
 export const salesApi = {
@@ -131,7 +177,17 @@ export const salesApi = {
     return apiRequest<SaleReceipt>(`/sales/${saleId}/receipt`);
   },
 
-  list(params: SaleListParams = {}): Promise<Page<Sale>> {
-    return apiRequest<Page<Sale>>(withQuery("/sales", { page_size: 20, ...params }));
+  list(params: SaleListParams = {}): Promise<Page<SaleSummary>> {
+    return apiRequest<Page<SaleSummary>>(withQuery("/sales", { page_size: 10, ...params }));
+  },
+
+  /** Cashiers who have sales, for the screen's filter (needs only `sales:read`). */
+  cashierOptions(): Promise<SaleCashierOption[]> {
+    return apiRequest<SaleCashierOption[]>("/sales/cashiers");
+  },
+
+  /** Reverse a completed sale: restock it, unwind any credit, mark it refunded. */
+  refund(saleId: string, payload: SaleRefundPayload = {}): Promise<Sale> {
+    return apiRequest<Sale>(`/sales/${saleId}/refund`, { method: "POST", body: payload });
   },
 };

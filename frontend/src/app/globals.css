@@ -1,5 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* HeroUI v3 provides the sales date-range calendar. Its own tokens are layered,
+   so the unlayered design tokens below still win for shared names. */
+@import "@heroui/styles";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -258,4 +261,50 @@
 @utility focus-ring {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * HeroUI date picker — token reconciliation
+ *
+ * HeroUI's calendar reads --accent* and --muted for its selection, "today" dot
+ * and weekday labels. Our design tokens declare the *same names*, and because
+ * ours are unlayered they win over HeroUI's layered theme — so those states
+ * collapsed onto our near-white surface tints (a washed-out selection and
+ * barely-there weekday text). Re-declare just the values the picker needs,
+ * scoped to it, mapped onto the brand. Applies to both themes automatically.
+ * ------------------------------------------------------------------------- */
+.date-range-picker,
+.range-calendar {
+  --accent: var(--primary);
+  --accent-foreground: var(--primary-foreground);
+  --accent-hover: color-mix(in oklab, var(--primary) 90%, var(--primary-foreground) 10%);
+  --accent-soft: color-mix(in oklab, var(--primary) 16%, transparent);
+  --accent-soft-foreground: color-mix(in oklab, var(--primary) 62%, var(--foreground) 38%);
+  --accent-soft-hover: color-mix(in oklab, var(--primary) 28%, transparent);
+
+  /* Round the control like every other input in the app. */
+  --field-radius: calc(var(--radius) - 2px);
+}
+
+.range-calendar {
+  /* Weekday labels and out-of-month days use HeroUI's --muted, which for us is
+     a near-white surface tint. */
+  --muted: var(--muted-foreground);
+}
+
+/* The trigger field paints its segments, calendar icon and "/" separators with
+   --field-placeholder / --muted. HeroUI sets --field-placeholder to var(--muted),
+   so ours left the whole field near-white. Show the text in the app's ink. */
+.date-range-picker {
+  --field-foreground: var(--foreground);
+  --field-placeholder: var(--foreground);
+  --muted: var(--foreground);
+}
+
+/* HeroUI ships the field with a 0-width, transparent border. Trace it with the
+   same border the other toolbar filters (the app's Input) use, flat (no shadow). */
+.date-range-picker .date-input-group {
+  border-width: 1px;
+  border-color: var(--input);
+  box-shadow: none;
 }

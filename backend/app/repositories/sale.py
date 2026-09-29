@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 from sqlalchemy import Select, func, select
 
 from app.models.sale import Sale
+from app.models.user import User
 from app.repositories.base import BaseRepository
 from app.utils.pagination import PageParams
 from app.utils.text import like_pattern
@@ -21,12 +22,25 @@ class SaleRepository(BaseRepository[Sale]):
         "sale_number": Sale.sale_number,
         "sold_at": Sale.sold_at,
         "total": Sale.total,
+        "paid": Sale.paid,
+        "due": Sale.due,
+        "status": Sale.status,
         "created_at": Sale.created_at,
     }
 
     async def number_exists(self, number: str) -> bool:
         stmt = select(Sale.id).where(Sale.sale_number == number).limit(1)
         return (await self.session.execute(stmt)).scalar_one_or_none() is not None
+
+    async def cashiers(self) -> Sequence[tuple[uuid.UUID, str]]:
+        """Distinct staff who have rung up sales, ordered by name."""
+        stmt = (
+            select(User.id, User.full_name)
+            .join(Sale, Sale.cashier_id == User.id)
+            .distinct()
+            .order_by(User.full_name)
+        )
+        return [(row[0], row[1]) for row in (await self.session.execute(stmt)).all()]
 
     def build_list_query(
         self,
@@ -36,6 +50,7 @@ class SaleRepository(BaseRepository[Sale]):
         customer_id: uuid.UUID | None = None,
         cashier_id: uuid.UUID | None = None,
         status: str | None = None,
+        payment_status: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
     ) -> Select[Any]:
@@ -51,6 +66,14 @@ class SaleRepository(BaseRepository[Sale]):
             stmt = stmt.where(Sale.cashier_id == cashier_id)
         if status is not None:
             stmt = stmt.where(Sale.status == status)
+        # Settlement is derived from the arithmetic the DB already enforces
+        # (``due = total - paid``), so no extra column or join is needed.
+        if payment_status == "paid":
+            stmt = stmt.where(Sale.due == 0)
+        elif payment_status == "unpaid":
+            stmt = stmt.where(Sale.paid == 0, Sale.due > 0)
+        elif payment_status == "partial":
+            stmt = stmt.where(Sale.paid > 0, Sale.due > 0)
         if date_from is not None:
             stmt = stmt.where(func.date(Sale.sold_at) >= date_from)
         if date_to is not None:
