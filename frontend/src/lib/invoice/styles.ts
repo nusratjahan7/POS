@@ -66,6 +66,7 @@ const BASE = `
 .inv-note { margin-top: 14px; padding: 6px 9px; border: 1px solid var(--inv-line); border-radius: 4px; font-size: 11px; }
 .inv-foot { margin-top: 18px; text-align: center; color: var(--inv-muted); }
 .inv-thanks { font-weight: 700; color: var(--inv-ink); }
+.inv-barcode { display: block; width: 100%; max-width: 54mm; height: auto; margin: 8px auto 0; }
 .inv-fine { margin-top: 2px; font-size: 10px; }
 
 @media screen {
@@ -89,6 +90,11 @@ const THERMAL = `
 .inv-thermal .inv-meta { grid-template-columns: 1fr; gap: 0; margin: 8px 0; }
 .inv-thermal .inv-col-no, .inv-thermal .inv-disc-col { display: none; }
 .inv-thermal .inv-items th, .inv-thermal .inv-items td { padding: 2px; }
+/* Keep Qty/Price/Amt hugging their figures with one small even gap, instead of
+   letting the table's spare width stretch them apart across the paper. */
+.inv-thermal .inv-items .inv-num { width: 1%; padding-left: 6px; padding-right: 0; }
+/* Extra breathing room between the price and amount columns. */
+.inv-thermal .inv-items th:last-child, .inv-thermal .inv-items td:last-child { padding-left: 14px; }
 .inv-thermal .inv-items thead th { border-top-width: 1px; }
 .inv-thermal .inv-totals { width: 100%; }
 .inv-thermal .inv-line-strong { font-size: 13px; }

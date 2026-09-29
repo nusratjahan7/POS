@@ -40,6 +40,21 @@ export function formatMoney(
 }
 
 /**
+ * Formats a monetary value as a grouped plain number, with no currency attached.
+ * Used where a document carries one currency throughout (receipts, invoices), so
+ * restating the code on every line is noise. A zero cents part is dropped
+ * (`2,550.00` → `2,550`) while real cents are kept (`19.80`).
+ */
+export function formatAmount(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const amount = typeof value === "string" ? Number(value) : value;
+  if (Number.isNaN(amount)) return "—";
+  return amount
+    .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    .replace(/\.00$/, "");
+}
+
+/**
  * Formats a quantity, dropping the trailing zeros the API's fixed-scale decimals
  * carry, so `"79.000"` reads as `"79"` and `"45.500"` as `"45.5"`. Units are never
  * shown — they are a product attribute, not part of a stock figure.

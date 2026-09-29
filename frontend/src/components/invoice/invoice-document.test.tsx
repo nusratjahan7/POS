@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 
 import { InvoiceDocument } from "./invoice-document";
 import type { SaleReceipt } from "@/lib/api/sales";
-import { formatMoney, formatQuantity } from "@/lib/format";
+import { formatAmount, formatQuantity } from "@/lib/format";
 
 const receipt: SaleReceipt = {
   business: {
@@ -88,17 +88,75 @@ describe("InvoiceDocument", () => {
     expect(screen.getByText("Coffee Beans")).toBeTruthy();
     expect(screen.getByText("BEAN-1 · kg")).toBeTruthy();
     expect(screen.getByText(formatQuantity("2.000"))).toBeTruthy();
-    expect(screen.getByText(formatMoney("18.00", "USD"))).toBeTruthy();
+    expect(screen.getByText(formatAmount("18.00"))).toBeTruthy();
   });
 
   it("shows the totals, the tax label and the change given", () => {
     render(<InvoiceDocument receipt={receipt} variant="thermal" />);
 
     expect(screen.getByText("Subtotal")).toBeTruthy();
-    expect(screen.getByText(formatMoney("20.00", "USD"))).toBeTruthy();
+    expect(screen.getByText(formatAmount("20.00"))).toBeTruthy();
     expect(screen.getByText("VAT")).toBeTruthy();
+    // "Paid" carries what the customer handed over, not the amount applied.
+    expect(screen.getByText("Paid")).toBeTruthy();
+    expect(screen.getByText(formatAmount("25.00"))).toBeTruthy();
+    expect(screen.queryByText("Received")).toBeNull();
     expect(screen.getByText("Change")).toBeTruthy();
-    expect(screen.getByText(formatMoney("5.20", "USD"))).toBeTruthy();
+    expect(screen.getByText(formatAmount("5.20"))).toBeTruthy();
+  });
+
+  it("hides the method line for one tender but lists every method when split", () => {
+    const { unmount } = render(<InvoiceDocument receipt={receipt} variant="a4" />);
+    expect(screen.queryByText("Cash")).toBeNull();
+    unmount();
+
+    const split: SaleReceipt = {
+      ...receipt,
+      sale: {
+        ...receipt.sale,
+        change_amount: "0.00",
+        payments: [
+          {
+            ...receipt.sale.payments[0],
+            id: "pay1",
+            amount: "10.00",
+            tendered: null,
+            change_given: "0.00",
+          },
+          {
+            ...receipt.sale.payments[0],
+            id: "pay2",
+            amount: "9.80",
+            tendered: null,
+            change_given: "0.00",
+            payment_method: { id: "m2", name: "Card", code: "card", kind: "card" },
+          },
+        ],
+      },
+    };
+
+    render(<InvoiceDocument receipt={split} variant="a4" />);
+
+    expect(screen.getByText("Cash")).toBeTruthy();
+    expect(screen.getByText("Card")).toBeTruthy();
+  });
+
+  it("stamps the sale number as a barcode under the footer", () => {
+    const { container } = render(<InvoiceDocument receipt={receipt} variant="thermal" />);
+
+    const barcode = container.querySelector("svg.inv-barcode");
+    expect(barcode?.getAttribute("aria-label")).toBe("Barcode for INV-20260101-ABCDEF");
+    expect(barcode?.querySelectorAll("rect").length).toBeGreaterThan(0);
+  });
+
+  it("shortens the amount column header on the narrow thermal layout", () => {
+    const { unmount } = render(<InvoiceDocument receipt={receipt} variant="thermal" />);
+    expect(screen.getByText("Amt")).toBeTruthy();
+    expect(screen.queryByText("Amount")).toBeNull();
+    unmount();
+
+    render(<InvoiceDocument receipt={receipt} variant="a4" />);
+    expect(screen.getByText("Amount")).toBeTruthy();
   });
 
   it("resolves the logo through the media URL helper", () => {

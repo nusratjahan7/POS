@@ -1,8 +1,9 @@
 import * as React from "react";
 
+import { InvoiceBarcode } from "@/components/invoice/invoice-barcode";
 import { mediaUrl } from "@/lib/api/client";
 import type { SaleReceipt } from "@/lib/api/sales";
-import { formatDateTime, formatMoney, formatQuantity } from "@/lib/format";
+import { formatAmount, formatDateTime, formatQuantity } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { InvoiceVariant } from "@/lib/invoice/styles";
 
@@ -40,8 +41,7 @@ export type InvoiceDocumentProps = React.ComponentProps<"div"> & {
  */
 export function InvoiceDocument({ receipt, variant, className, ...props }: InvoiceDocumentProps) {
   const { business, branch, sale } = receipt;
-  const currency = business.currency;
-  const money = (value: string | number | null | undefined) => formatMoney(value, currency);
+  const money = (value: string | number | null | undefined) => formatAmount(value);
   const logo = mediaUrl(business.logo_url);
 
   // Prefer the branch's own address, falling back to the business's, without ever
@@ -55,6 +55,15 @@ export function InvoiceDocument({ receipt, variant, className, ...props }: Invoi
   const hasTax = Number(sale.tax) > 0;
   const hasChange = Number(sale.change_amount) > 0;
   const hasDue = Number(sale.due) > 0;
+  // What the customer actually handed over: the cash tendered where it was
+  // recorded, otherwise the amount applied. Change is returned out of this.
+  const received = sale.payments.reduce(
+    (sum, payment) => sum + Number(payment.tendered ?? payment.amount),
+    0,
+  );
+  // A single tender needs no method line — it only restates "Paid". Split
+  // payments list each method so the cashier can see where the money went.
+  const isSplit = sale.payments.length > 1;
 
   return (
     <div className={cn("inv", variant === "a4" ? "inv-a4" : "inv-thermal", className)} {...props}>
@@ -102,7 +111,7 @@ export function InvoiceDocument({ receipt, variant, className, ...props }: Invoi
             <th className="inv-num">Qty</th>
             <th className="inv-num">Price</th>
             <th className="inv-num inv-disc-col">Disc</th>
-            <th className="inv-num">Amount</th>
+            <th className="inv-num">{variant === "a4" ? "Amount" : "Amt"}</th>
           </tr>
         </thead>
         <tbody>
@@ -136,18 +145,20 @@ export function InvoiceDocument({ receipt, variant, className, ...props }: Invoi
 
       <section className="inv-payments">
         <div className="inv-section-title">Payment</div>
-        {sale.payments.map((payment) => (
-          <InvoiceLine
-            key={payment.id}
-            label={
-              payment.reference
-                ? `${payment.payment_method.name} · ${payment.reference}`
-                : payment.payment_method.name
-            }
-            value={money(payment.amount)}
-          />
-        ))}
-        <InvoiceLine label="Paid" value={money(sale.paid)} />
+        {isSplit
+          ? sale.payments.map((payment) => (
+              <InvoiceLine
+                key={payment.id}
+                label={
+                  payment.reference
+                    ? `${payment.payment_method.name} · ${payment.reference}`
+                    : payment.payment_method.name
+                }
+                value={money(payment.amount)}
+              />
+            ))
+          : null}
+        <InvoiceLine label="Paid" value={money(received)} />
         {hasChange ? <InvoiceLine label="Change" value={money(sale.change_amount)} /> : null}
         {hasDue ? <InvoiceLine label="Due" value={money(sale.due)} strong /> : null}
       </section>
@@ -159,6 +170,7 @@ export function InvoiceDocument({ receipt, variant, className, ...props }: Invoi
           </div>
         ) : null}
         <div className="inv-thanks">Thank you for your business!</div>
+        <InvoiceBarcode value={sale.sale_number} />
         <div className="inv-fine">
           {sale.sale_number} · {business.name}
         </div>
