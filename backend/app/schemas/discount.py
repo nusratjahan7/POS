@@ -137,5 +137,8 @@ class PriceBreakdown(BaseModel):
     order_discount: Decimal
     total_discount: Decimal
     net: Decimal
+    #: Tax on the net, and the amount actually payable (inclusive or net + tax).
+    tax: Decimal
+    total: Decimal
     coupon: DiscountApplied | None
     applied: list[DiscountApplied]

@@ -68,13 +68,12 @@ async def list_discounts(
 async def validate_basket(
     session: SessionDep, payload: DiscountPreviewRequest
 ) -> PriceBreakdown:
-    pricing = await DiscountService(session).price(
+    return await DiscountService(session).preview(
         payload.items,
         customer_id=payload.customer_id,
         coupon_code=payload.coupon_code,
         order_discount=payload.order_discount,
     )
-    return pricing.breakdown()
 
 
 @router.post(

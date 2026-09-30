@@ -86,6 +86,9 @@ export type PriceBreakdown = {
   order_discount: string;
   total_discount: string;
   net: string;
+  /** Tax on the net, and the amount actually payable. */
+  tax: string;
+  total: string;
   coupon: DiscountApplied | null;
   applied: DiscountApplied[];
 };

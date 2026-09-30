@@ -481,6 +481,55 @@ async def test_coupon_validation_covers_every_rule(
 
 
 # ---------------------------------------------------------------------------
+# The preview is the same pricing the sale uses
+# ---------------------------------------------------------------------------
+async def test_the_preview_reports_the_amount_due_the_sale_uses(
+    client: AsyncClient, auth_headers: dict[str, str], seeded: Any
+) -> None:
+    product = await _product(client, auth_headers)
+    await _discount(
+        client, auth_headers, name="Save one", code="SAVE1", scope="cart", type="fixed", value="1"
+    )
+    item = [{"product_id": product["id"], "quantity": "3"}]  # 6.00
+
+    preview = await _preview(client, auth_headers, item, coupon_code="SAVE1")
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["net"] == "5.00"
+    assert body["total"] == "5.00"
+
+    sale = await _sell(client, auth_headers, seeded, item, pay="5.00", coupon_code="SAVE1")
+    assert sale.status_code == 201, sale.text
+    # What the till previewed is exactly what the sale is recorded at.
+    assert sale.json()["total"] == body["total"]
+
+
+async def test_the_preview_and_the_sale_agree_when_tax_is_on(
+    client: AsyncClient, auth_headers: dict[str, str], seeded: Any
+) -> None:
+    updated = await client.patch(
+        "/api/v1/business",
+        headers=auth_headers,
+        json={"tax_enabled": True, "tax_inclusive": False, "default_tax_rate": "10"},
+    )
+    assert updated.status_code == 200, updated.text
+
+    product = await _product(client, auth_headers)
+    item = [{"product_id": product["id"], "quantity": "3"}]  # 6.00
+
+    preview = await _preview(client, auth_headers, item)
+    body = preview.json()
+    assert body["net"] == "6.00"
+    assert body["tax"] == "0.60"
+    assert body["total"] == "6.60"
+
+    sale = await _sell(client, auth_headers, seeded, item, pay="6.60")
+    assert sale.status_code == 201, sale.text
+    assert sale.json()["tax"] == "0.60"
+    assert sale.json()["total"] == body["total"]
+
+
+# ---------------------------------------------------------------------------
 # Preview never persists
 # ---------------------------------------------------------------------------
 async def test_the_preview_does_not_create_a_sale(

@@ -22,9 +22,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError, UnprocessableError
+from app.models.business import Business
 from app.models.discount import Discount
 from app.models.discount_redemption import DiscountRedemption
 from app.repositories.brand import BrandRepository
+from app.repositories.business import BusinessRepository
 from app.repositories.category import CategoryRepository
 from app.repositories.customer import CustomerRepository
 from app.repositories.discount import DiscountRedemptionRepository, DiscountRepository
@@ -41,6 +43,7 @@ from app.schemas.discount import (
 )
 from app.utils.money import ZERO, money
 from app.utils.pagination import PageParams
+from app.utils.tax import tax_for, total_for
 
 HUNDRED = Decimal("100")
 
@@ -53,6 +56,7 @@ class _Line:
     unit: str
     quantity: Decimal
     unit_price: Decimal
+    cost_price: Decimal
     subtotal: Decimal
     manual_discount: Decimal
     category_id: uuid.UUID | None
@@ -68,6 +72,7 @@ class PricedLine:
     unit: str
     quantity: Decimal
     unit_price: Decimal
+    cost_price: Decimal
     subtotal: Decimal
     manual_discount: Decimal
     automatic_discount: Decimal
@@ -95,6 +100,8 @@ class Pricing:
     order_discount: Decimal
     total_discount: Decimal
     net: Decimal
+    tax: Decimal
+    total: Decimal
     coupon_code: str | None
     applied: list[AppliedDiscount] = field(default_factory=list)
 
@@ -120,6 +127,8 @@ class Pricing:
             order_discount=self.order_discount,
             total_discount=self.total_discount,
             net=self.net,
+            tax=self.tax,
+            total=self.total,
             coupon=(
                 DiscountApplied(code=coupon.code, name=coupon.name, amount=coupon.amount)
                 if coupon
@@ -141,6 +150,7 @@ class DiscountService:
         self.brands = BrandRepository(session)
         self.customers = CustomerRepository(session)
         self.sales = SaleRepository(session)
+        self.business = BusinessRepository(session)
 
     # --- Reads -------------------------------------------------------------
     async def get_or_404(self, discount_id: uuid.UUID) -> Discount:
@@ -291,8 +301,14 @@ class DiscountService:
         customer_id: uuid.UUID | None,
         coupon_code: str | None,
         order_discount: Decimal,
+        business: Business | None = None,
     ) -> Pricing:
-        """Value a basket: automatic promos, manual discounts, then a coupon."""
+        """Value a basket: automatic promos, manual discounts, then a coupon.
+
+        ``business`` supplies the tax settings, so the tax and the amount payable
+        are part of the same calculation the sale will use. Omitted (``None``),
+        tax is zero — the sale always passes it.
+        """
         lines = await self._resolve_lines(rows)
         subtotal = money(sum((line.subtotal for line in lines), ZERO))
 
@@ -362,6 +378,7 @@ class DiscountService:
                     unit=line.unit,
                     quantity=line.quantity,
                     unit_price=line.unit_price,
+                    cost_price=line.cost_price,
                     subtotal=line.subtotal,
                     manual_discount=money(manual),
                     automatic_discount=money(auto),
@@ -427,6 +444,8 @@ class DiscountService:
         running = money(running - manual_order)
 
         total_discount = money(line_discounts + cart_discount + coupon_discount + manual_order)
+        net = running
+        tax = tax_for(net, business)
         return Pricing(
             lines=priced,
             subtotal=subtotal,
@@ -435,10 +454,34 @@ class DiscountService:
             coupon_discount=coupon_discount,
             order_discount=money(manual_order),
             total_discount=total_discount,
-            net=running,
+            net=net,
+            tax=tax,
+            total=total_for(net, tax, business),
             coupon_code=coupon.code if coupon else None,
             applied=applied,
         )
+
+    async def preview(
+        self,
+        rows: Sequence[DiscountLineInput],
+        *,
+        customer_id: uuid.UUID | None,
+        coupon_code: str | None,
+        order_discount: Decimal,
+    ) -> PriceBreakdown:
+        """Price a basket for the till: discounts plus the tax and amount due.
+
+        The same engine the sale runs, so the figure shown here is the figure the
+        sale is recorded at.
+        """
+        pricing = await self.price(
+            rows,
+            customer_id=customer_id,
+            coupon_code=coupon_code,
+            order_discount=order_discount,
+            business=await self.business.get_default(),
+        )
+        return pricing.breakdown()
 
     async def resolve_coupon(
         self, code: str, *, subtotal: Decimal, customer_id: uuid.UUID | None
@@ -555,6 +598,7 @@ class DiscountService:
                     unit=product.unit,
                     quantity=row.quantity,
                     unit_price=unit_price,
+                    cost_price=money(product.purchase_price),
                     subtotal=line_subtotal,
                     manual_discount=manual,
                     category_id=product.category_id,

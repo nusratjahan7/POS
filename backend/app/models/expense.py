@@ -62,7 +62,7 @@ class Expense(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     description: Mapped[str | None] = mapped_column(String(255))
     reference: Mapped[str | None] = mapped_column(String(64))
-    spent_at: Mapped[date] = mapped_column(Date, nullable=False)
+    spent_at: Mapped[date] = mapped_column(Date, index=True, nullable=False)
 
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), index=True

@@ -4,7 +4,7 @@ import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Numeric, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -61,6 +61,10 @@ class SaleItem(Base, UUIDPrimaryKeyMixin):
 
     quantity: Mapped[Decimal] = mapped_column(QUANTITY, nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    #: Unit cost captured at sale time from the product's purchase price, so
+    #: gross-profit reports survive later purchase-price changes. Historical
+    #: rows are backfilled with the current cost, so they are approximate.
+    cost_price: Mapped[Decimal] = mapped_column(MONEY, server_default=text("0"), nullable=False)
     discount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     subtotal: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     line_total: Mapped[Decimal] = mapped_column(MONEY, nullable=False)

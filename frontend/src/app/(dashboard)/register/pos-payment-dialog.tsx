@@ -119,6 +119,11 @@ export function PosPaymentDialog({
     retry: false,
   });
 
+  // What the customer actually owes. The server prices the basket — promotions,
+  // the coupon and tax — so its total is authoritative; the cart's own total is
+  // only an estimate until the preview answers.
+  const payable = previewQuery.data ? Number(previewQuery.data.total) : totals.total;
+
   // Before the cashier touches anything, the whole total sits on the default
   // method. Derived rather than stored, so it follows the total and needs no
   // effect to keep in step.
@@ -128,22 +133,38 @@ export function PosPaymentDialog({
     return {
       key: "default",
       methodId: preferred.id,
-      amount: totals.total.toFixed(2),
-      received: totals.total.toFixed(2),
+      amount: payable.toFixed(2),
+      received: payable.toFixed(2),
       reference: "",
     };
-  }, [methods, totals.total]);
+  }, [methods, payable]);
 
   const shown = tenders.length > 0 ? tenders : defaultTender ? [defaultTender] : [];
 
-  const applied = shown.reduce((sum, tender) => sum + (Number(tender.amount) || 0), 0);
-  const change = shown.reduce((sum, tender) => {
-    const amount = Number(tender.amount) || 0;
-    const received = Number(tender.received) || 0;
-    return sum + Math.max(received - amount, 0);
+  // What each tender actually applies to the sale. A cash tender applies only
+  // what is still due and treats the rest of what was handed over as change, so
+  // the applied total can never exceed the amount due. Non-cash methods apply
+  // exactly what was entered — only cash can give change, so an over-application
+  // on a card is reported rather than silently absorbed.
+  let remaining = payable;
+  const appliedByTender: number[] = [];
+  for (const tender of shown) {
+    const cash = methodById.get(tender.methodId)?.kind === "cash";
+    const entered = cash ? Number(tender.received) || 0 : Number(tender.amount) || 0;
+    const apply = cash
+      ? Math.min(Math.max(entered, 0), Math.max(remaining, 0))
+      : Math.max(entered, 0);
+    appliedByTender.push(apply);
+    remaining = Math.max(remaining - apply, 0);
+  }
+
+  const applied = appliedByTender.reduce((sum, value) => sum + value, 0);
+  const overpaid = Math.max(applied - payable, 0);
+  const change = shown.reduce((sum, tender, index) => {
+    if (methodById.get(tender.methodId)?.kind !== "cash") return sum;
+    return sum + Math.max((Number(tender.received) || 0) - appliedByTender[index], 0);
   }, 0);
-  const due = Math.max(totals.total - applied, 0);
-  const overpaid = Math.max(applied - totals.total, 0);
+  const due = Math.max(payable - applied, 0);
 
   const missingReference = shown.find((tender) => {
     const method = methodById.get(tender.methodId);
@@ -154,7 +175,7 @@ export function PosPaymentDialog({
     shown.length === 0 || applied <= 0
       ? "Enter how the customer is paying."
       : overpaid > 0
-        ? `That is ${money(overpaid, currency)} more than the total — record the extra as the amount received.`
+        ? `${money(overpaid, currency)} beyond the total is applied on a non-cash method. Only cash gives change — reduce it.`
         : due > 0 && !customer
           ? `${money(due, currency)} would be left unpaid. Choose a customer to carry it, or take the full amount.`
           : missingReference
@@ -167,18 +188,36 @@ export function PosPaymentDialog({
     );
   }
 
+  function changeMethod(key: string, methodId: string) {
+    const isCash = methodById.get(methodId)?.kind === "cash";
+    setTenders(
+      shown.map((tender) =>
+        tender.key === key
+          ? {
+              ...tender,
+              methodId,
+              // A cash row is driven by what was received; seed it so the field
+              // is never blank when there is an amount to apply.
+              received: isCash && !tender.received ? tender.amount : tender.received,
+            }
+          : tender,
+      ),
+    );
+  }
+
   function addTender() {
     const fallback =
       methods.find((method) => method.kind === "card") ?? methods[1] ?? methods[0];
     if (!fallback) return;
     const key = nextTenderKey();
+    const amount = (due > 0 ? due : 0).toFixed(2);
     setTenders([
       ...shown,
       {
         key,
         methodId: fallback.id,
-        amount: (due > 0 ? due : 0).toFixed(2),
-        received: "",
+        amount,
+        received: fallback.kind === "cash" ? amount : "",
         reference: "",
       },
     ]);
@@ -198,14 +237,14 @@ export function PosPaymentDialog({
           quantity: String(line.quantity),
           discount: line.discount.toFixed(2),
         })),
-        payments: shown.map((tender) => {
+        payments: shown.map((tender, index) => {
           const method = methodById.get(tender.methodId);
-          const amount = Number(tender.amount) || 0;
+          const amount = appliedByTender[index];
           const received = Number(tender.received) || 0;
           return {
             payment_method_id: tender.methodId,
             amount: amount.toFixed(2),
-            // Only cash can give change, and only when there is change to give.
+            // Only cash can give change, and only when more was handed over.
             tendered:
               method?.kind === "cash" && received > amount ? received.toFixed(2) : null,
             reference: tender.reference.trim() || null,
@@ -327,7 +366,7 @@ export function PosPaymentDialog({
         <div className="flex items-end justify-between gap-3 rounded-md border p-3">
           <span className="text-muted-foreground text-sm">Amount due</span>
           <span className="text-2xl leading-none font-semibold tabular-nums">
-            {money(totals.total, currency)}
+            {money(payable, currency)}
           </span>
         </div>
 
@@ -342,7 +381,7 @@ export function PosPaymentDialog({
                   <div className="flex items-center gap-2">
                     <Select
                       value={tender.methodId}
-                      onValueChange={(value) => updateTender(tender.key, { methodId: value })}
+                      onValueChange={(value) => changeMethod(tender.key, value)}
                     >
                       <SelectTrigger className="flex-1" aria-label={`Payment method ${index + 1}`}>
                         <SelectValue placeholder="Method" />
@@ -368,7 +407,24 @@ export function PosPaymentDialog({
                     ) : null}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  {method?.kind === "cash" ? (
+                    <Field
+                      label="Amount received"
+                      htmlFor={`received-${tender.key}`}
+                      hint="Change is worked out for you."
+                    >
+                      <Input
+                        id={`received-${tender.key}`}
+                        inputMode="decimal"
+                        value={tender.received}
+                        onChange={(event) =>
+                          updateTender(tender.key, { received: event.target.value })
+                        }
+                        placeholder="0.00"
+                        className="tabular-nums"
+                      />
+                    </Field>
+                  ) : (
                     <Field label="Amount" htmlFor={`amount-${tender.key}`}>
                       <Input
                         id={`amount-${tender.key}`}
@@ -381,21 +437,7 @@ export function PosPaymentDialog({
                         className="tabular-nums"
                       />
                     </Field>
-                    {method?.kind === "cash" ? (
-                      <Field label="Received" htmlFor={`received-${tender.key}`}>
-                        <Input
-                          id={`received-${tender.key}`}
-                          inputMode="decimal"
-                          value={tender.received}
-                          onChange={(event) =>
-                            updateTender(tender.key, { received: event.target.value })
-                          }
-                          placeholder="0.00"
-                          className="tabular-nums"
-                        />
-                      </Field>
-                    ) : null}
-                  </div>
+                  )}
 
                   {method?.requires_reference ? (
                     <Field
@@ -527,7 +569,7 @@ export function PosPaymentDialog({
             }}
             disabled={Boolean(blocking) || mutation.isPending || shown.length === 0}
           >
-            {mutation.isPending ? "Completing…" : `Complete sale · ${money(totals.total, currency)}`}
+            {mutation.isPending ? "Completing…" : `Complete sale · ${money(payable, currency)}`}
           </Button>
         </DialogFooter>
       </DialogContent>

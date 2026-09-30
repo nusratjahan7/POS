@@ -118,5 +118,6 @@ npm run build
 | Dues Management (Customer & Supplier Ledgers) | ✅ |
 | Expenses & Cash Register | ✅ |
 | Discounts & Coupons   | ✅     |
+| Reporting & Analytics | ✅     |
 
 See `backend/README.md` and `frontend/README.md` for module-level detail.

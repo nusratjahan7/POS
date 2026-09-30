@@ -25,7 +25,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ConflictError, NotFoundError, UnprocessableError
-from app.models.business import Business
 from app.models.customer import Customer
 from app.models.register import Register
 from app.models.sale import Sale
@@ -153,19 +152,6 @@ class SaleService:
             )
         return register
 
-    def _tax_for(self, net: Decimal, business: Business | None) -> Decimal:
-        """Tax on the discounted net, following the business's settings.
-
-        Mirrors the till's own preview arithmetic so the two never disagree.
-        """
-        if business is None or not business.tax_enabled or business.default_tax_rate <= 0:
-            return ZERO
-        rate = business.default_tax_rate / HUNDRED
-        if business.tax_inclusive:
-            # The shelf price already contains the tax; extract the embedded part.
-            return money(net - net / (1 + rate))
-        return money(net * rate)
-
     async def _build_payments(
         self, rows: Sequence[SalePaymentCreate]
     ) -> tuple[list[SalePayment], Decimal, Decimal, Decimal]:
@@ -251,6 +237,7 @@ class SaleService:
             customer_id=payload.customer_id,
             coupon_code=payload.coupon_code,
             order_discount=payload.order_discount,
+            business=business,
         )
         items = [
             SaleItem(
@@ -260,6 +247,7 @@ class SaleService:
                 unit=line.unit,
                 quantity=line.quantity,
                 unit_price=line.unit_price,
+                cost_price=line.cost_price,
                 discount=line.discount,
                 subtotal=line.subtotal,
                 line_total=line.line_total,
@@ -269,10 +257,10 @@ class SaleService:
         subtotal = pricing.subtotal
         discount = pricing.total_discount
 
-        net = pricing.net
-        tax = self._tax_for(net, business)
-        inclusive = bool(business and business.tax_enabled and business.tax_inclusive)
-        total = net if inclusive else money(net + tax)
+        # Tax and the amount payable come from the same pricing pass the till
+        # previews, so the two can never disagree.
+        tax = pricing.tax
+        total = pricing.total
 
         payments, applied, change, cash_taken = await self._build_payments(payload.payments)
 

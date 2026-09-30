@@ -72,7 +72,7 @@ class Purchase(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=False,
     )
 
-    purchase_date: Mapped[date] = mapped_column(Date, nullable=False)
+    purchase_date: Mapped[date] = mapped_column(Date, index=True, nullable=False)
 
     subtotal: Mapped[Decimal] = mapped_column(MONEY, server_default=text("0"), nullable=False)
     discount: Mapped[Decimal] = mapped_column(MONEY, server_default=text("0"), nullable=False)

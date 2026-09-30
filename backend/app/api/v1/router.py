@@ -20,6 +20,7 @@ from app.api.v1.endpoints import (
     purchases,
     register_sessions,
     registers,
+    reports,
     roles,
     sales,
     suppliers,
@@ -49,6 +50,7 @@ api_router.include_router(sales.router)
 api_router.include_router(discounts.router)
 api_router.include_router(expenses.router)
 api_router.include_router(register_sessions.router)
+api_router.include_router(reports.router)
 api_router.include_router(uploads.router)
 
 __all__ = ["api_router"]

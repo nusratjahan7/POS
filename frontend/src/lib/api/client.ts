@@ -209,3 +209,47 @@ export async function apiUpload<T>(
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;
 }
+
+export type DownloadedFile = {
+  blob: Blob;
+  filename: string;
+};
+
+function filenameFromDisposition(header: string | null): string {
+  if (!header) return "download";
+  const match = /filename="?([^";]+)"?/i.exec(header);
+  return match?.[1] ?? "download";
+}
+
+/**
+ * Fetch a file (an export) with the bearer token attached and return it as a
+ * Blob plus its server-suggested filename.
+ *
+ * A plain `<a href>` download cannot be used: the access token lives in memory,
+ * so the request must go through `fetch` to carry the `Authorization` header.
+ * The 401 refresh-and-replay behaviour matches {@link apiRequest}.
+ */
+export async function apiDownload(
+  path: string,
+  options: { retryOn401?: boolean } = {},
+): Promise<DownloadedFile> {
+  const { retryOn401 = true } = options;
+
+  const headers = new Headers();
+  const token = tokenStore.get();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const response = await fetch(`${API_BASE_URL}${path}`, { headers, credentials: "include" });
+
+  if (response.status === 401 && retryOn401) {
+    if (await refreshSession()) return apiDownload(path, { retryOn401: false });
+    tokenStore.clear();
+    sessionExpiredHandler?.();
+    throw await toApiError(response);
+  }
+
+  if (!response.ok) throw await toApiError(response);
+
+  const blob = await response.blob();
+  return { blob, filename: filenameFromDisposition(response.headers.get("Content-Disposition")) };
+}

@@ -22,6 +22,7 @@ dependencies = [
     # Required by FastAPI for multipart/form-data (product image uploads).
     "python-multipart>=0.0.18",
     "tzdata>=2026.4",
+    "openpyxl>=3.1.5",
 ]
 
 [dependency-groups]

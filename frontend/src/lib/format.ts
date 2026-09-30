@@ -23,6 +23,9 @@ export function initials(name: string): string {
 
 /**
  * Formats a monetary string (as the API returns decimals) in the given currency.
+ *
+ * A whole amount drops its zero cents (`2,550.00` → `2,550`) while real cents are
+ * kept (`19.80`), so totals read like price tags rather than ledger entries.
  * Falls back to a plain fixed-point string if the currency code is not valid.
  */
 export function formatMoney(
@@ -32,10 +35,17 @@ export function formatMoney(
   if (value === null || value === undefined || value === "") return "—";
   const amount = typeof value === "string" ? Number(value) : value;
   if (Number.isNaN(amount)) return "—";
+  const rounded = Math.round(amount * 100) / 100;
+  const digits = Number.isInteger(rounded) ? 0 : 2;
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(rounded);
   } catch {
-    return amount.toFixed(2);
+    return rounded.toFixed(digits);
   }
 }
 

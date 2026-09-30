@@ -104,6 +104,8 @@ const breakdown: PriceBreakdown = {
   order_discount: "0.00",
   total_discount: "1.00",
   net: "5.00",
+  tax: "0.00",
+  total: "5.00",
   coupon: { code: "SAVE1", name: "Save one", amount: "1.00" },
   applied: [{ code: "SAVE1", name: "Save one", amount: "1.00" }],
 };
@@ -135,7 +137,14 @@ function renderDialog(couponCode = "") {
 
 beforeEach(() => {
   validate.mockResolvedValue(breakdown);
-  createSale.mockResolvedValue({});
+  createSale.mockResolvedValue({
+    id: "sale-1",
+    sale_number: "SALE-0001",
+    total: "5.00",
+    paid: "5.00",
+    change_amount: "15.00",
+    items: [{ quantity: "3" }],
+  });
 });
 
 afterEach(() => {
@@ -191,5 +200,50 @@ describe("PosPaymentDialog coupon preview", () => {
     await user.click(screen.getByRole("button", { name: "Clear" }));
 
     expect(onCouponChange).toHaveBeenCalledWith("");
+  });
+
+  it("treats cash handed over above the total as change, not payment", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    const received = await screen.findByLabelText("Amount received");
+    await user.clear(received);
+    await user.type(received, "20"); // 20 handed over for a 5.00 total
+
+    expect(screen.queryByText(/beyond the total/)).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Complete sale/ }));
+
+    await waitFor(() => expect(createSale).toHaveBeenCalledTimes(1));
+    const payload = createSale.mock.calls[0][0] as {
+      payments: { amount: string; tendered: string | null }[];
+    };
+    // Applied is capped at the total; the extra rides along as money received.
+    expect(payload.payments[0]).toEqual(
+      expect.objectContaining({ amount: "5.00", tendered: "20.00" }),
+    );
+  });
+
+  it("uses the server-priced total, not the cart estimate", async () => {
+    const user = userEvent.setup();
+    validate.mockResolvedValue({
+      ...breakdown,
+      coupon_discount: "1.00",
+      total_discount: "1.00",
+      net: "4.00",
+      total: "4.00",
+    });
+    renderDialog();
+
+    // The cart holds 5.00; the server priced the basket at 4.00 after the coupon.
+    expect(
+      await screen.findByRole("button", { name: "Complete sale · $4.00" }),
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /Complete sale/ }));
+
+    await waitFor(() => expect(createSale).toHaveBeenCalledTimes(1));
+    const payload = createSale.mock.calls[0][0] as { payments: { amount: string }[] };
+    expect(payload.payments[0].amount).toBe("4.00");
   });
 });
