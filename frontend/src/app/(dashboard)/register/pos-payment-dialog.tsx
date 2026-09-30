@@ -55,6 +55,7 @@ export function PosPaymentDialog({
   orderDiscount,
   customer,
   branchId,
+  registerId,
   currency,
   onClose,
   onComplete,
@@ -64,6 +65,7 @@ export function PosPaymentDialog({
   orderDiscount: number;
   customer: PosCustomer | null;
   branchId: string;
+  registerId: string;
   currency: string;
   onClose: () => void;
   onComplete: (sale: Sale) => void;
@@ -156,6 +158,7 @@ export function PosPaymentDialog({
     mutationFn: () =>
       salesApi.create({
         branch_id: branchId,
+        register_id: registerId,
         customer_id: customer?.id ?? null,
         note: note.trim() || null,
         order_discount: orderDiscount.toFixed(2),

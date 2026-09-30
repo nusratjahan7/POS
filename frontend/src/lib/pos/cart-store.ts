@@ -57,12 +57,15 @@ export type SyncResult = { adjusted: LimitAdjustment[]; removed: string[] };
 
 type CartState = {
   branchId: string | null;
+  /** The till this cart will be rung on; its session must be open to sell. */
+  registerId: string | null;
   customer: PosCustomer | null;
   lines: CartLine[];
   orderDiscount: number;
   held: HeldCart[];
 
   setBranch: (branchId: string | null) => void;
+  setRegister: (registerId: string | null) => void;
   addLine: (line: Omit<CartLine, "quantity" | "discount">, quantity?: number) => AddResult;
   setQuantity: (productId: string, quantity: number) => QuantityResult;
   setLineDiscount: (productId: string, discount: number) => void;
@@ -91,12 +94,15 @@ export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       branchId: null,
+      registerId: null,
       customer: null,
       lines: [],
       orderDiscount: 0,
       held: [],
 
-      setBranch: (branchId) => set({ branchId }),
+      // A register belongs to a branch, so switching branch drops the till too.
+      setBranch: (branchId) => set({ branchId, registerId: null }),
+      setRegister: (registerId) => set({ registerId }),
 
       addLine: (line, quantity = 1) => {
         const state = get();
@@ -211,14 +217,24 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: "pos-cart",
-      version: 2,
+      version: 3,
       // Rehydrated manually on mount so SSR and the first client render agree.
       skipHydration: true,
-      // v1 lines carried `stockQuantity` instead of `limit`; drop them.
-      migrate: (_persisted, version) =>
-        version < 2
-          ? { branchId: null, customer: null, lines: [], orderDiscount: 0, held: [] }
-          : (_persisted as CartState),
+      // v1 lines carried `stockQuantity` instead of `limit`; v2 had no register.
+      migrate: (persisted, version) => {
+        if (version < 2) {
+          return {
+            branchId: null,
+            registerId: null,
+            customer: null,
+            lines: [],
+            orderDiscount: 0,
+            held: [],
+          };
+        }
+        const state = persisted as Partial<CartState>;
+        return { ...(persisted as CartState), registerId: state.registerId ?? null };
+      },
     },
   ),
 );

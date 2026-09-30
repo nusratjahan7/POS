@@ -23,8 +23,10 @@ from app.core.security import hash_password
 from app.db.session import SessionFactory
 from app.models.branch import Branch
 from app.models.business import Business
+from app.models.expense_category import ExpenseCategory
 from app.models.payment_method import PaymentMethod
 from app.models.permission import Permission
+from app.models.register import Register
 from app.models.role import Role
 from app.models.user import User
 from app.utils.text import normalize_email
@@ -34,7 +36,17 @@ logger = logging.getLogger("app.seed")
 DEFAULT_BRANCH_CODE = "MAIN"
 DEFAULT_BRANCH_NAME = "Main Branch"
 DEFAULT_BUSINESS_NAME = "My Business"
+DEFAULT_REGISTER_NAME = "Front Counter"
 ADMINISTRATOR_ROLE = "Administrator"
+
+# The buckets a new installation files expenses under.
+DEFAULT_EXPENSE_CATEGORIES: tuple[str, ...] = (
+    "Rent",
+    "Utilities",
+    "Salaries",
+    "Supplies",
+    "Other",
+)
 
 
 # The payment methods a new installation can tender with. `is_system` rows are
@@ -178,6 +190,40 @@ async def seed_payment_methods(session: AsyncSession) -> dict[str, PaymentMethod
     return existing
 
 
+async def seed_register(session: AsyncSession, *, branch: Branch) -> Register:
+    register = (
+        await session.execute(
+            select(Register).where(
+                Register.branch_id == branch.id, Register.name == DEFAULT_REGISTER_NAME
+            )
+        )
+    ).scalar_one_or_none()
+    if register is None:
+        register = Register(name=DEFAULT_REGISTER_NAME, branch=branch, is_active=True)
+        session.add(register)
+        await session.flush()
+        logger.info("Created default register %s", DEFAULT_REGISTER_NAME)
+    return register
+
+
+async def seed_expense_categories(session: AsyncSession) -> None:
+    existing = {
+        category.name
+        for category in (
+            await session.execute(
+                select(ExpenseCategory).where(ExpenseCategory.deleted_at.is_(None))
+            )
+        ).scalars()
+    }
+    created = 0
+    for name in DEFAULT_EXPENSE_CATEGORIES:
+        if name not in existing:
+            session.add(ExpenseCategory(name=name, is_active=True))
+            created += 1
+    await session.flush()
+    logger.info("Expense categories: %d total (%d created)", len(existing) + created, created)
+
+
 async def seed_superuser(
     session: AsyncSession,
     *,
@@ -218,6 +264,8 @@ async def run() -> None:
         branch = await seed_branch(session)
         await seed_business(session, branch=branch)
         await seed_payment_methods(session)
+        await seed_register(session, branch=branch)
+        await seed_expense_categories(session)
         await seed_superuser(session, branch=branch, roles=roles)
         await session.commit()
     logger.info("Seed complete. Sign in as %s", settings.FIRST_SUPERUSER_EMAIL)

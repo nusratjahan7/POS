@@ -27,6 +27,7 @@ from sqlalchemy.orm import selectinload
 from app.core.exceptions import ConflictError, NotFoundError, UnprocessableError
 from app.models.business import Business
 from app.models.customer import Customer
+from app.models.register import Register
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.models.sale_payment import SalePayment
@@ -40,6 +41,7 @@ from app.repositories.sale import SaleRepository
 from app.schemas.sale import SaleCreate, SaleItemCreate, SalePaymentCreate
 from app.services.customer import CustomerService
 from app.services.inventory import InventoryService
+from app.services.register_session import RegisterSessionService
 from app.utils.money import ZERO, money
 from app.utils.pagination import PageParams
 
@@ -58,6 +60,7 @@ class SaleService:
         self.registers = RegisterRepository(session)
         self.inventory = InventoryService(session)
         self.credit = CustomerService(session)
+        self.cash = RegisterSessionService(session)
 
     # --- Reads -------------------------------------------------------------
     def _detail_query(self, sale_id: uuid.UUID) -> Any:
@@ -133,9 +136,9 @@ class SaleService:
             )
         return customer
 
-    async def _validate_register(self, register_id: uuid.UUID, branch_id: uuid.UUID) -> None:
+    async def _validate_register(self, register_id: uuid.UUID, branch_id: uuid.UUID) -> Register:
         register = await self.registers.get(register_id)
-        if register is None:
+        if register is None or register.is_deleted:
             raise UnprocessableError(
                 "The selected register does not exist.",
                 code="unknown_register",
@@ -147,6 +150,7 @@ class SaleService:
                 code="register_branch_mismatch",
                 details=[{"field": "register_id", "message": "Wrong branch."}],
             )
+        return register
 
     def _tax_for(self, net: Decimal, business: Business | None) -> Decimal:
         """Tax on the discounted net, following the business's settings.
@@ -220,11 +224,12 @@ class SaleService:
 
     async def _build_payments(
         self, rows: Sequence[SalePaymentCreate]
-    ) -> tuple[list[SalePayment], Decimal, Decimal]:
-        """Validate each tender and total what it applies and what it returns."""
+    ) -> tuple[list[SalePayment], Decimal, Decimal, Decimal]:
+        """Validate each tender and total what it applies, returns and pays in cash."""
         payments: list[SalePayment] = []
         applied = ZERO
         change = ZERO
+        cash_taken = ZERO
 
         for row in rows:
             method = await self.methods.get(row.payment_method_id)
@@ -268,8 +273,10 @@ class SaleService:
             )
             applied += amount
             change += given
+            if method.opens_cash_drawer:
+                cash_taken += amount
 
-        return payments, money(applied), money(change)
+        return payments, money(applied), money(change), money(cash_taken)
 
     # --- Commands ----------------------------------------------------------
     async def create(self, payload: SaleCreate, *, actor_id: uuid.UUID | None = None) -> Sale:
@@ -282,8 +289,11 @@ class SaleService:
         branch = await self._resolve_branch(payload.branch_id)
         customer = await self._resolve_customer(payload.customer_id)
         business = await self.business.get_default()
-        if payload.register_id is not None:
-            await self._validate_register(payload.register_id, branch.id)
+
+        # Every sale is rung against an open till: the register must exist and
+        # belong to this branch, and its session must be open.
+        register = await self._validate_register(payload.register_id, branch.id)
+        cash_session = await self.cash.require_open(register.id)
 
         items, subtotal = await self._build_items(payload.items)
 
@@ -304,7 +314,7 @@ class SaleService:
         inclusive = bool(business and business.tax_enabled and business.tax_inclusive)
         total = net if inclusive else money(net + tax)
 
-        payments, applied, change = await self._build_payments(payload.payments)
+        payments, applied, change, cash_taken = await self._build_payments(payload.payments)
 
         if applied > total:
             raise UnprocessableError(
@@ -334,7 +344,7 @@ class SaleService:
             id=uuid.uuid4(),
             sale_number=await self._unique_number(),
             branch=branch,
-            register_id=payload.register_id,
+            register_id=register.id,
             customer=customer,
             cashier_id=actor_id,
             subtotal=subtotal,
@@ -375,6 +385,19 @@ class SaleService:
             # Staged, not committed — it lands with this sale or not at all.
             if due > 0 and customer is not None:
                 await self.credit.charge_credit(customer.id, due)
+
+            # Cash applied goes into the open drawer (the tendered amount less any
+            # change already handed back). Staged with the sale.
+            if cash_taken > 0:
+                await self.cash.record_cash(
+                    cash_session.id,
+                    cash_taken,
+                    movement_type="sale",
+                    reference_type="sale",
+                    reference_id=sale.id,
+                    user_id=actor_id,
+                    note=f"Cash on {sale.sale_number}",
+                )
 
             await self.session.commit()
         except Exception:

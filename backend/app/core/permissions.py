@@ -30,8 +30,13 @@ class PermissionCode(StrEnum):
     BUSINESS_WRITE = "business:write"
     REGISTERS_READ = "registers:read"
     REGISTERS_WRITE = "registers:write"
+    REGISTERS_OPERATE = "registers:operate"
     PAYMENTS_READ = "payments:read"
     PAYMENTS_WRITE = "payments:write"
+
+    # Finance (expenses and cash reconciliation)
+    EXPENSES_READ = "expenses:read"
+    EXPENSES_WRITE = "expenses:write"
 
     # Catalog (products, categories, modifiers)
     CATALOG_READ = "catalog:read"
@@ -96,8 +101,13 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.BUSINESS_WRITE, "Edit the business profile and tax settings"),
     PermissionSpec(PermissionCode.REGISTERS_READ, "View registers"),
     PermissionSpec(PermissionCode.REGISTERS_WRITE, "Create and edit registers"),
+    PermissionSpec(
+        PermissionCode.REGISTERS_OPERATE, "Open, close and adjust a register session"
+    ),
     PermissionSpec(PermissionCode.PAYMENTS_READ, "View payment methods"),
     PermissionSpec(PermissionCode.PAYMENTS_WRITE, "Create and edit payment methods"),
+    PermissionSpec(PermissionCode.EXPENSES_READ, "View expenses and cash register sessions"),
+    PermissionSpec(PermissionCode.EXPENSES_WRITE, "Record expenses"),
     PermissionSpec(PermissionCode.CATALOG_READ, "View products and categories"),
     PermissionSpec(PermissionCode.CATALOG_WRITE, "Create and edit products and categories"),
     PermissionSpec(PermissionCode.CATALOG_DELETE, "Delete products and categories"),
@@ -154,8 +164,11 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.BUSINESS_READ,
                 PermissionCode.REGISTERS_READ,
                 PermissionCode.REGISTERS_WRITE,
+                PermissionCode.REGISTERS_OPERATE,
                 PermissionCode.PAYMENTS_READ,
                 PermissionCode.PAYMENTS_WRITE,
+                PermissionCode.EXPENSES_READ,
+                PermissionCode.EXPENSES_WRITE,
                 PermissionCode.SETTINGS_READ,
                 PermissionCode.CATALOG_READ,
                 PermissionCode.CATALOG_WRITE,
@@ -202,6 +215,7 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.BRANCHES_READ,
                 PermissionCode.BUSINESS_READ,
                 PermissionCode.REGISTERS_READ,
+                PermissionCode.REGISTERS_OPERATE,
                 PermissionCode.PAYMENTS_READ,
                 PermissionCode.INVENTORY_READ,
                 PermissionCode.SALES_CREATE,

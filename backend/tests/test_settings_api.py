@@ -176,8 +176,10 @@ async def test_registers_can_be_filtered_by_branch_and_updated(
     listed = await client.get(
         REGISTERS, headers=auth_headers, params={"branch_id": str(seeded.branch.id)}
     )
-    assert listed.json()["total"] == 1
-    assert listed.json()["items"][0]["id"] == created["id"]
+    # The branch also carries the seeded "Front Counter" till.
+    items = listed.json()["items"]
+    assert created["id"] in {row["id"] for row in items}
+    assert all(row["branch_id"] == str(seeded.branch.id) for row in items)
 
     updated = await client.patch(
         f"{REGISTERS}/{created['id']}",
@@ -204,9 +206,9 @@ async def test_register_options_expose_id_name_and_branch(
 
     options = (await client.get(f"{REGISTERS}/options", headers=auth_headers)).json()
 
-    assert len(options) == 1
+    assert len(options) >= 1
     assert set(options[0]) == {"id", "name", "branch_id"}
-    assert options[0]["branch_id"] == str(seeded.branch.id)
+    assert all(row["branch_id"] == str(seeded.branch.id) for row in options)
 
 
 # ---------------------------------------------------------------------------

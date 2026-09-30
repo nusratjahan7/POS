@@ -25,7 +25,8 @@ export type SalePaymentInput = {
  */
 export type SaleCreatePayload = {
   branch_id: string;
-  register_id?: string | null;
+  /** The till this sale is rung on; its register session must be open. */
+  register_id: string;
   customer_id?: string | null;
   note?: string | null;
   order_discount?: string;

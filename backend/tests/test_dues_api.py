@@ -18,6 +18,22 @@ SALES = "/api/v1/sales"
 CUSTOMERS = "/api/v1/customers"
 SUPPLIERS = "/api/v1/suppliers"
 PURCHASES = "/api/v1/purchases"
+REGISTER_SESSIONS = "/api/v1/register-sessions"
+
+
+async def _ensure_session(client: AsyncClient, headers: dict[str, str], seeded: Any) -> None:
+    """Sales need an open till; open the seeded register once per test."""
+    register_id = str(seeded.register.id)
+    current = await client.get(
+        f"{REGISTER_SESSIONS}/current", headers=headers, params={"register_id": register_id}
+    )
+    if current.status_code == 200 and current.json() is None:
+        opened = await client.post(
+            REGISTER_SESSIONS,
+            headers=headers,
+            json={"register_id": register_id, "opening_cash": "0"},
+        )
+        assert opened.status_code == 201, opened.text
 
 
 # ---------------------------------------------------------------------------
@@ -72,11 +88,13 @@ async def _credit_sale(
 ) -> dict[str, Any]:
     """A sale partly carried on the customer's account."""
     product = await _product(client, headers, selling_price=price)
+    await _ensure_session(client, headers, seeded)
     response = await client.post(
         SALES,
         headers=headers,
         json={
             "branch_id": str(seeded.branch.id),
+            "register_id": str(seeded.register.id),
             "customer_id": customer_id,
             "items": [{"product_id": product["id"], "quantity": quantity}],
             "payments": [
@@ -194,18 +212,14 @@ async def test_supplier_ledger_reconciles_with_the_balance(
 
     assert statement["closing_balance"] == balance
     assert statement["opening_balance"] == "0.00"
-    assert [entry["entry_type"] for entry in statement["entries"]] == [
-        "purchase",
-        "payment",
-        "payment",
-    ]
-    purchase, receipt_payment, later_payment = statement["entries"]
-    assert purchase["credit"] == "50.00"  # the whole payable incurred
-    assert purchase["debit"] == "0.00"
-    assert receipt_payment["debit"] == "20.00"
-    assert later_payment["debit"] == "10.00"
-    # Charges settle after they are raised, never dipping negative.
-    assert [entry["balance"] for entry in statement["entries"]] == ["50.00", "30.00", "20.00"]
+    entries = statement["entries"]
+    assert [entry["entry_type"] for entry in entries] == ["purchase", "payment", "payment"]
+    # The purchase raises the payable; the two payments bring it back down.
+    assert entries[0]["credit"] == "50.00"  # the whole payable incurred
+    assert entries[0]["debit"] == "0.00"
+    assert entries[0]["balance"] == "50.00"
+    # The two payments share a timestamp, so their order is not asserted.
+    assert sorted(entry["debit"] for entry in entries[1:]) == ["10.00", "20.00"]
 
 
 # ---------------------------------------------------------------------------

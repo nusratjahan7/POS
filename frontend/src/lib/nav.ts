@@ -1,6 +1,8 @@
 import {
+  Banknote,
   BarChart3,
   Boxes,
+  Calculator,
   FolderTree,
   HandCoins,
   LayoutDashboard,
@@ -55,6 +57,8 @@ export const navGroups: NavGroup[] = [
       { title: "Customers", href: "/customers", icon: Users, status: "available", permission: "customers:read" },
       { title: "Customer Dues", href: "/dues/customers", icon: Wallet, status: "available", permission: "customers:read" },
       { title: "Supplier Dues", href: "/dues/suppliers", icon: HandCoins, status: "available", permission: "suppliers:read" },
+      { title: "Expenses", href: "/expenses", icon: Banknote, status: "available", permission: "expenses:read" },
+      { title: "Cash Sessions", href: "/cash-sessions", icon: Calculator, status: "available", permission: "registers:read" },
     ],
   },
   {

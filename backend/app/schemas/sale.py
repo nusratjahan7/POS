@@ -45,7 +45,8 @@ class SaleCreate(BaseModel):
     """
 
     branch_id: uuid.UUID
-    register_id: uuid.UUID | None = None
+    #: The till this sale is rung on. Its register session must be open.
+    register_id: uuid.UUID
     customer_id: uuid.UUID | None = None
     note: str | None = Field(default=None, max_length=255)
     order_discount: Money = Decimal("0")

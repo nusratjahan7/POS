@@ -116,5 +116,6 @@ npm run build
 | Sales Management      | ✅     |
 | Sales Returns & Refunds | ✅   |
 | Dues Management (Customer & Supplier Ledgers) | ✅ |
+| Expenses & Cash Register | ✅ |
 
 See `backend/README.md` and `frontend/README.md` for module-level detail.

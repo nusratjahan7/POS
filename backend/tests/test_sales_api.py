@@ -12,6 +12,8 @@ CUSTOMERS = "/api/v1/customers"
 BUSINESS = "/api/v1/business"
 POS_STOCK = "/api/v1/pos/stock"
 MOVEMENTS = "/api/v1/inventory/movements"
+REGISTERS = "/api/v1/registers"
+SESSIONS = "/api/v1/register-sessions"
 
 
 async def _product(
@@ -56,6 +58,29 @@ def _sale_body(
     return payload
 
 
+async def _register_with_session(
+    client: AsyncClient, headers: dict[str, str], branch_id: Any
+) -> str:
+    """The branch's first register, opened — a sale now needs an open till."""
+    options = await client.get(
+        f"{REGISTERS}/options", headers=headers, params={"branch_id": str(branch_id)}
+    )
+    assert options.status_code == 200, options.text
+    register_id = str(options.json()[0]["id"])
+
+    current = await client.get(
+        f"{SESSIONS}/current", headers=headers, params={"register_id": register_id}
+    )
+    if current.status_code == 200 and current.json() is None:
+        opened = await client.post(
+            SESSIONS,
+            headers=headers,
+            json={"register_id": register_id, "opening_cash": "0"},
+        )
+        assert opened.status_code == 201, opened.text
+    return register_id
+
+
 async def _sell(
     client: AsyncClient,
     headers: dict[str, str],
@@ -64,9 +89,10 @@ async def _sell(
     payments: list[dict[str, Any]],
     **overrides: Any,
 ) -> Any:
-    return await client.post(
-        SALES, headers=headers, json=_sale_body(branch_id, items, payments, **overrides)
-    )
+    register_id = await _register_with_session(client, headers, branch_id)
+    body = _sale_body(branch_id, items, payments, **overrides)
+    body.setdefault("register_id", register_id)
+    return await client.post(SALES, headers=headers, json=body)
 
 
 async def _stock(

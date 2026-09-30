@@ -6,10 +6,14 @@ import { Printer, Search, ShieldAlert, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 
 import { PosCart } from "@/app/(dashboard)/register/pos-cart";
+import { CashMovementDialog } from "@/app/(dashboard)/register/cash-movement-dialog";
+import { CloseRegisterDialog } from "@/app/(dashboard)/register/close-register-dialog";
 import { PosDiscountDialog, PosHeldListDialog, PosHoldDialog } from "@/app/(dashboard)/register/pos-dialogs";
 import { PosCustomerDialog } from "@/app/(dashboard)/register/pos-customer-dialog";
+import { OpenRegisterDialog } from "@/app/(dashboard)/register/open-register-dialog";
 import { PosPaymentDialog } from "@/app/(dashboard)/register/pos-payment-dialog";
 import { PosProductGrid } from "@/app/(dashboard)/register/pos-product-grid";
+import { RegisterSessionBar } from "@/app/(dashboard)/register/register-session-bar";
 import { InvoicePreviewDialog } from "@/components/invoice/invoice-preview-dialog";
 import { useCan } from "@/components/auth/can";
 import { Button } from "@/components/ui/button";
@@ -24,9 +28,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { posApi, type PosProduct } from "@/lib/api/pos";
+import { registerSessionsApi } from "@/lib/api/register-sessions";
 import { branchesApi } from "@/lib/api/rbac";
 import { type Sale } from "@/lib/api/sales";
-import { businessApi } from "@/lib/api/settings";
+import { businessApi, registersApi } from "@/lib/api/settings";
 import { computeTotals, useCartStore, type SyncResult } from "@/lib/pos/cart-store";
 import { usePosSettings } from "@/lib/pos/settings-store";
 import {
@@ -47,6 +52,7 @@ const EMPTY_SYNC: SyncResult = { adjusted: [], removed: [] };
 export function RegisterClient() {
   const canSell = useCan("sales:create");
   const canReadBranches = useCan("branches:read");
+  const canOperate = useCan("registers:operate");
 
   // Cart + settings are persisted; rehydrate after mount so the server and the
   // first client render agree (no hydration mismatch).
@@ -88,6 +94,7 @@ export function RegisterClient() {
   const orderDiscount = useCartStore((state) => state.orderDiscount);
   const held = useCartStore((state) => state.held);
   const branchId = useCartStore((state) => state.branchId);
+  const registerId = useCartStore((state) => state.registerId);
 
   const addLine = useCartStore((state) => state.addLine);
   const setQuantity = useCartStore((state) => state.setQuantity);
@@ -96,6 +103,7 @@ export function RegisterClient() {
   const setCustomer = useCartStore((state) => state.setCustomer);
   const setOrderDiscount = useCartStore((state) => state.setOrderDiscount);
   const setBranch = useCartStore((state) => state.setBranch);
+  const setRegister = useCartStore((state) => state.setRegister);
   const syncLimits = useCartStore((state) => state.syncLimits);
   const clear = useCartStore((state) => state.clear);
   const hold = useCartStore((state) => state.hold);
@@ -113,6 +121,9 @@ export function RegisterClient() {
   const [holdOpen, setHoldOpen] = React.useState(false);
   const [heldOpen, setHeldOpen] = React.useState(false);
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
+  const [registerOpen, setRegisterOpen] = React.useState(false);
+  const [closeOpen, setCloseOpen] = React.useState(false);
+  const [cashDirection, setCashDirection] = React.useState<"in" | "out" | null>(null);
   const [lastSale, setLastSale] = React.useState<Sale | null>(null);
   const [invoiceSale, setInvoiceSale] = React.useState<Sale | null>(null);
 
@@ -142,6 +153,26 @@ export function RegisterClient() {
 
   const branches = branchesQuery.data ?? [];
   const effectiveBranch = branchId ?? branches[0]?.id ?? "";
+
+  // The branch's tills, and the one this cart will be rung on.
+  const registersQuery = useQuery({
+    queryKey: ["registers", "options", effectiveBranch],
+    queryFn: () => registersApi.list({ branch_id: effectiveBranch, page_size: 100 }),
+    enabled: canSell && Boolean(effectiveBranch),
+  });
+  const registers = registersQuery.data?.items ?? [];
+  const effectiveRegister =
+    registerId && registers.some((register) => register.id === registerId)
+      ? registerId
+      : (registers[0]?.id ?? "");
+
+  // The open session (if any) for that till — the sell gate and drawer figures.
+  const sessionQuery = useQuery({
+    queryKey: ["register-session", effectiveRegister],
+    queryFn: () => registerSessionsApi.current(effectiveRegister),
+    enabled: canSell && Boolean(effectiveRegister),
+  });
+  const sessionDetail = sessionQuery.data ?? null;
 
   const catalogQuery = useQuery({
     queryKey: ["pos", "catalog", { query, category, branch: effectiveBranch }],
@@ -263,6 +294,12 @@ export function RegisterClient() {
   }
 
   async function openCheckout() {
+    // A sale is always rung against an open till.
+    if (!sessionDetail) {
+      toast.error("Open the register before ringing a sale.");
+      if (canOperate) setRegisterOpen(true);
+      return;
+    }
     // Re-validate the cap against live stock before showing the summary.
     const report = await refreshLimits(effectiveBranch);
     for (const item of report.adjusted) {
@@ -280,6 +317,8 @@ export function RegisterClient() {
     void queryClient.invalidateQueries({ queryKey: ["pos", "catalog"] });
     void queryClient.invalidateQueries({ queryKey: ["pos", "categories"] });
     void queryClient.invalidateQueries({ queryKey: ["customers"] });
+    // The sale added cash to the drawer.
+    void queryClient.invalidateQueries({ queryKey: ["register-session", effectiveRegister] });
   }
 
   function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -385,8 +424,23 @@ export function RegisterClient() {
   }
 
   return (
-    <div className="flex flex-1 flex-col lg:h-[calc(100svh_-_3.5rem)] lg:min-h-0 lg:flex-row">
-      {/* Left: search, categories, products */}
+    <div className="flex flex-1 flex-col lg:h-[calc(100svh_-_3.5rem)] lg:min-h-0">
+      <RegisterSessionBar
+        registers={registers}
+        registerId={effectiveRegister}
+        onRegisterChange={setRegister}
+        detail={sessionDetail}
+        isLoading={registersQuery.isPending || sessionQuery.isPending}
+        canOperate={canOperate}
+        currency={currency}
+        onOpen={() => setRegisterOpen(true)}
+        onCashIn={() => setCashDirection("in")}
+        onCashOut={() => setCashDirection("out")}
+        onCloseRegister={() => setCloseOpen(true)}
+      />
+
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        {/* Left: search, categories, products */}
       <section className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-col gap-3 border-b px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -507,6 +561,7 @@ export function RegisterClient() {
           onHeld={() => setHeldOpen(true)}
         />
       </aside>
+      </div>
 
       {customerOpen ? (
         <PosCustomerDialog
@@ -552,6 +607,7 @@ export function RegisterClient() {
           orderDiscount={orderDiscount}
           customer={customer}
           branchId={effectiveBranch}
+          registerId={effectiveRegister}
           currency={currency}
           onClose={() => setCheckoutOpen(false)}
           onComplete={handleSaleComplete}
@@ -560,6 +616,33 @@ export function RegisterClient() {
 
       {invoiceSale ? (
         <InvoicePreviewDialog saleId={invoiceSale.id} onClose={() => setInvoiceSale(null)} />
+      ) : null}
+
+      {registerOpen && registers.length > 0 ? (
+        <OpenRegisterDialog
+          register={registers.find((register) => register.id === effectiveRegister) ?? registers[0]}
+          currency={currency}
+          onClose={() => setRegisterOpen(false)}
+          onOpened={() => void sessionQuery.refetch()}
+        />
+      ) : null}
+
+      {closeOpen && sessionDetail ? (
+        <CloseRegisterDialog
+          detail={sessionDetail}
+          currency={currency}
+          onClose={() => setCloseOpen(false)}
+          onClosed={() => void sessionQuery.refetch()}
+        />
+      ) : null}
+
+      {cashDirection && sessionDetail ? (
+        <CashMovementDialog
+          sessionId={sessionDetail.session.id}
+          direction={cashDirection}
+          onClose={() => setCashDirection(null)}
+          onDone={() => void sessionQuery.refetch()}
+        />
       ) : null}
     </div>
   );

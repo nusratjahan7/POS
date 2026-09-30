@@ -27,11 +27,13 @@ from app.models.sale_item import SaleItem
 from app.models.sale_return import SaleReturn
 from app.models.sale_return_item import SaleReturnItem
 from app.repositories.payment_method import PaymentMethodRepository
+from app.repositories.register_session import RegisterSessionRepository
 from app.repositories.sale import SaleRepository
 from app.repositories.sale_return import SaleReturnRepository
 from app.schemas.sale_return import SaleReturnCreate
 from app.services.customer import CustomerService
 from app.services.inventory import InventoryService
+from app.services.register_session import RegisterSessionService
 from app.services.sale import money
 
 ZERO = Decimal("0.00")
@@ -51,6 +53,8 @@ class SaleReturnService:
         self.methods = PaymentMethodRepository(session)
         self.inventory = InventoryService(session)
         self.credit = CustomerService(session)
+        self.sessions = RegisterSessionRepository(session)
+        self.cash = RegisterSessionService(session)
 
     # --- Reads -------------------------------------------------------------
     def _detail_query(self, return_id: uuid.UUID) -> Any:
@@ -254,6 +258,21 @@ class SaleReturnService:
 
             if credit_reversed > 0 and sale.customer_id is not None:
                 await self.credit.reverse_credit(sale.customer_id, credit_reversed)
+
+            # Cash handed back comes out of the drawer of the till the sale was
+            # rung on, when that till is still open.
+            if record.cash_refund > 0 and sale.register_id is not None:
+                open_session = await self.sessions.get_open_for_register(sale.register_id)
+                if open_session is not None:
+                    await self.cash.record_cash(
+                        open_session.id,
+                        -record.cash_refund,
+                        movement_type="refund",
+                        reference_type="sale_return",
+                        reference_id=record.id,
+                        user_id=actor_id,
+                        note=f"Refund {record.return_number} on {sale.sale_number}",
+                    )
 
             sale.returned_amount = money(sale.returned_amount + refund_total)
             if sale.returned_amount >= sale.total:

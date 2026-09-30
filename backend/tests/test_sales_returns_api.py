@@ -19,6 +19,26 @@ SALES = "/api/v1/sales"
 CUSTOMERS = "/api/v1/customers"
 POS_STOCK = "/api/v1/pos/stock"
 MOVEMENTS = "/api/v1/inventory/movements"
+REGISTER_SESSIONS = "/api/v1/register-sessions"
+
+
+async def _ensure_session(
+    client: AsyncClient, headers: dict[str, str], seeded: Any
+) -> None:
+    """Sales need an open till; open the seeded register once per test."""
+    register_id = str(seeded.register.id)
+    current = await client.get(
+        f"{REGISTER_SESSIONS}/current",
+        headers=headers,
+        params={"register_id": register_id},
+    )
+    if current.status_code == 200 and current.json() is None:
+        opened = await client.post(
+            REGISTER_SESSIONS,
+            headers=headers,
+            json={"register_id": register_id, "opening_cash": "0"},
+        )
+        assert opened.status_code == 201, opened.text
 
 
 async def _product(
@@ -69,6 +89,7 @@ async def _sale(
     amount = pay or str(Decimal(price) * Decimal(quantity) - Decimal(order_discount or "0"))
     body: dict[str, Any] = {
         "branch_id": str(seeded.branch.id),
+        "register_id": str(seeded.register.id),
         "items": [{"product_id": product["id"], "quantity": quantity}],
         "payments": [_cash(seeded.payment_methods, amount)],
     }
@@ -77,6 +98,7 @@ async def _sale(
     if order_discount is not None:
         body["order_discount"] = order_discount
 
+    await _ensure_session(client, headers, seeded)
     response = await client.post(SALES, headers=headers, json=body)
     assert response.status_code == 201, response.text
     return product, response.json()
@@ -377,11 +399,13 @@ async def test_returning_needs_the_refund_permission(
     seeded: Any,
 ) -> None:
     product = await _product(client, auth_headers, selling_price="2.00", opening_stock="5")
+    await _ensure_session(client, cashier_headers, seeded)
     created = await client.post(
         SALES,
         headers=cashier_headers,
         json={
             "branch_id": str(seeded.branch.id),
+            "register_id": str(seeded.register.id),
             "items": [{"product_id": product["id"], "quantity": "1"}],
             "payments": [_cash(seeded.payment_methods, "2.00")],
         },

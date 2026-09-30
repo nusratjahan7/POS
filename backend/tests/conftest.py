@@ -44,8 +44,10 @@ from app.models.user import User  # noqa: E402
 from app.scripts.seed import (  # noqa: E402
     seed_branch,
     seed_business,
+    seed_expense_categories,
     seed_payment_methods,
     seed_permissions,
+    seed_register,
     seed_roles,
 )
 
@@ -154,6 +156,8 @@ async def seeded(db_session: AsyncSession) -> SimpleNamespace:
     branch = await seed_branch(db_session)
     business = await seed_business(db_session, branch=branch)
     payment_methods = await seed_payment_methods(db_session)
+    register = await seed_register(db_session, branch=branch)
+    await seed_expense_categories(db_session)
     await db_session.commit()
     return SimpleNamespace(
         permissions=permissions,
@@ -161,6 +165,7 @@ async def seeded(db_session: AsyncSession) -> SimpleNamespace:
         branch=branch,
         business=business,
         payment_methods=payment_methods,
+        register=register,
     )
 
 

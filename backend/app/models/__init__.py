@@ -8,9 +8,12 @@ from app.models.associations import role_permissions, user_roles
 from app.models.branch import Branch
 from app.models.brand import Brand
 from app.models.business import Business
+from app.models.cash_movement import CashMovement
 from app.models.category import Category
 from app.models.customer import Customer
 from app.models.customer_payment import CustomerPayment
+from app.models.expense import Expense
+from app.models.expense_category import ExpenseCategory
 from app.models.password_reset import PasswordResetToken
 from app.models.payment_method import PaymentMethod
 from app.models.permission import Permission
@@ -19,6 +22,7 @@ from app.models.purchase import Purchase
 from app.models.purchase_item import PurchaseItem
 from app.models.refresh_token import RefreshToken
 from app.models.register import Register
+from app.models.register_session import RegisterSession
 from app.models.role import Role
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
@@ -35,9 +39,12 @@ __all__ = [
     "Branch",
     "Brand",
     "Business",
+    "CashMovement",
     "Category",
     "Customer",
     "CustomerPayment",
+    "Expense",
+    "ExpenseCategory",
     "PasswordResetToken",
     "PaymentMethod",
     "Permission",
@@ -46,6 +53,7 @@ __all__ = [
     "PurchaseItem",
     "RefreshToken",
     "Register",
+    "RegisterSession",
     "Role",
     "Sale",
     "SaleItem",
