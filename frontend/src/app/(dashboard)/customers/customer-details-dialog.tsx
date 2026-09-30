@@ -180,12 +180,49 @@ export function CustomerDetailsDialog({
 
             <div className="flex flex-col gap-3">
               <h3 className="text-sm font-semibold">Purchase history</h3>
-              <EmptyState
-                icon={ShoppingBag}
-                size="compact"
-                title="No purchases yet"
-                description="Sales made to this customer will appear here once the sales module ships."
-              />
+              {details.recent_purchases.length === 0 ? (
+                <EmptyState
+                  icon={ShoppingBag}
+                  size="compact"
+                  title="No purchases yet"
+                  description="Sales made to this customer will appear here."
+                />
+              ) : (
+                <div className="overflow-hidden rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Reference</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right">Paid</TableHead>
+                        <TableHead className="text-right">Due</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {details.recent_purchases.map((purchase) => (
+                        <TableRow key={purchase.id}>
+                          <TableCell className="text-muted-foreground text-sm tabular-nums">
+                            {formatDateTime(purchase.purchased_at)}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {purchase.reference}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatMoney(purchase.total, currency)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatMoney(purchase.paid, currency)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium tabular-nums">
+                            {formatMoney(purchase.due, currency)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </div>
           </div>
         )}

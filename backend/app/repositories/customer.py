@@ -22,7 +22,11 @@ class CustomerRepository(BaseRepository[Customer]):
     }
 
     def build_list_query(
-        self, *, search: str | None = None, is_active: bool | None = None
+        self,
+        *,
+        search: str | None = None,
+        is_active: bool | None = None,
+        has_dues: bool | None = None,
     ) -> Select[Any]:
         stmt = select(Customer).where(Customer.deleted_at.is_(None))
         if search:
@@ -36,6 +40,9 @@ class CustomerRepository(BaseRepository[Customer]):
             )
         if is_active is not None:
             stmt = stmt.where(Customer.is_active.is_(is_active))
+        if has_dues:
+            # What the customer still owes; a negative balance is store credit, not a due.
+            stmt = stmt.where(Customer.balance > 0)
         return stmt
 
     async def list_customers(

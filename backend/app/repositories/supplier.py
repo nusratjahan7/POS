@@ -36,7 +36,11 @@ class SupplierRepository(BaseRepository[Supplier]):
         return int((await self.session.execute(stmt)).scalar_one())
 
     def build_list_query(
-        self, *, search: str | None = None, is_active: bool | None = None
+        self,
+        *,
+        search: str | None = None,
+        is_active: bool | None = None,
+        has_dues: bool | None = None,
     ) -> Select[Any]:
         stmt = select(Supplier).where(Supplier.deleted_at.is_(None))
         if search:
@@ -48,6 +52,9 @@ class SupplierRepository(BaseRepository[Supplier]):
             )
         if is_active is not None:
             stmt = stmt.where(Supplier.is_active.is_(is_active))
+        if has_dues:
+            # What we still owe the supplier.
+            stmt = stmt.where(Supplier.balance > 0)
         return stmt
 
     async def list_suppliers(

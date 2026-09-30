@@ -10,6 +10,7 @@ from pydantic import BaseModel, EmailStr, Field
 from app.schemas.common import ORMModel
 
 Money = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
+PaymentAmount = Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=2)]
 
 
 class SupplierBase(BaseModel):
@@ -56,3 +57,27 @@ class SupplierSummary(ORMModel):
     id: uuid.UUID
     name: str
     balance: Decimal
+
+
+class SupplierPaymentUser(ORMModel):
+    id: uuid.UUID
+    full_name: str
+
+
+class SupplierPaymentCreate(BaseModel):
+    """A payment made to a supplier against what we owe them."""
+
+    amount: PaymentAmount
+    method: str | None = Field(default=None, max_length=20)
+    reference: str | None = Field(default=None, max_length=64)
+    note: str | None = Field(default=None, max_length=255)
+
+
+class SupplierPaymentRead(ORMModel):
+    id: uuid.UUID
+    amount: Decimal
+    method: str | None
+    reference: str | None
+    note: str | None
+    user: SupplierPaymentUser | None
+    paid_at: datetime

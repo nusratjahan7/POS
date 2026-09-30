@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Numeric, String, text
+from sqlalchemy import Boolean, CheckConstraint, Numeric, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -18,9 +18,14 @@ class Supplier(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     ``opening_balance`` and is adjusted (atomically, inside the purchase
     transaction) as purchases are received and payments recorded — it is never
     computed on the fly, so the supplier ledger stays a true running total.
+
+    It may never go negative: a payment larger than what is owed is rejected, so
+    the payable bottoms out at zero (unlike a customer's, which may run into
+    store credit).
     """
 
     __tablename__ = "suppliers"
+    __table_args__ = (CheckConstraint("balance >= 0", name="balance_non_negative"),)
 
     name: Mapped[str] = mapped_column(String(160), unique=True, index=True, nullable=False)
     company: Mapped[str | None] = mapped_column(String(160))

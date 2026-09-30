@@ -122,3 +122,15 @@ class SaleRepository(BaseRepository[Sale]):
             .limit(limit)
         )
         return (await self.session.execute(stmt)).scalars().all()
+
+    async def purchases_for_customer(
+        self, customer_id: uuid.UUID, *, limit: int = 50
+    ) -> Sequence[Sale]:
+        """Every sale on a customer's account, newest first (for their history)."""
+        stmt = (
+            select(Sale)
+            .where(Sale.customer_id == customer_id)
+            .order_by(Sale.sold_at.desc())
+            .limit(limit)
+        )
+        return (await self.session.execute(stmt)).scalars().all()

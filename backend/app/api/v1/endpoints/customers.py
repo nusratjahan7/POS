@@ -1,8 +1,9 @@
-"""Customer endpoints: profile, receivables, payments and (future) purchase history."""
+"""Customer endpoints: profile, receivables, payments, ledger and purchase history."""
 
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -21,6 +22,7 @@ from app.schemas.customer import (
     CustomerSummary,
     CustomerUpdate,
 )
+from app.schemas.ledger import LedgerStatement
 from app.services.customer import CustomerService
 from app.utils.sorting import parse_sort
 
@@ -37,12 +39,16 @@ async def list_customers(
     params: Pagination,
     search: Annotated[str | None, Query(max_length=160, description="Name, phone or email")] = None,
     is_active: Annotated[bool | None, Query()] = None,
+    has_dues: Annotated[
+        bool | None, Query(description="Only customers who still owe something")
+    ] = None,
     sort: Annotated[str | None, Query(description="e.g. name, -balance")] = None,
 ) -> Page[CustomerRead]:
     customers, total = await CustomerService(session).list_customers(
         params,
         search=search,
         is_active=is_active,
+        has_dues=has_dues,
         sort=parse_sort(sort, CustomerRepository.SORTABLE, default="name"),
     )
     return Page.build(
@@ -159,14 +165,40 @@ async def record_customer_payment(
 
 
 @router.get(
+    "/{customer_id}/ledger",
+    response_model=LedgerStatement,
+    summary="The customer's account statement (date, reference, debit, credit, balance)",
+    dependencies=[Depends(require_permissions(PermissionCode.CUSTOMERS_READ))],
+)
+async def customer_ledger(
+    session: SessionDep,
+    customer_id: uuid.UUID,
+    date_from: Annotated[date | None, Query(description="Statement from")] = None,
+    date_to: Annotated[date | None, Query(description="Statement to")] = None,
+) -> LedgerStatement:
+    return await CustomerService(session).ledger(
+        customer_id, date_from=date_from, date_to=date_to
+    )
+
+
+@router.get(
     "/{customer_id}/purchases",
     response_model=list[CustomerPurchaseRead],
-    summary="Purchase history (populated once the sales module ships)",
+    summary="The customer's sales, newest first",
     dependencies=[Depends(require_permissions(PermissionCode.CUSTOMERS_READ))],
 )
 async def list_customer_purchases(
     session: SessionDep, customer_id: uuid.UUID
 ) -> list[CustomerPurchaseRead]:
-    await CustomerService(session).get_or_404(customer_id)
-    # No sales table yet — the shape is final, only the data is pending.
-    return []
+    sales = await CustomerService(session).list_purchases(customer_id)
+    return [
+        CustomerPurchaseRead(
+            id=sale.id,
+            reference=sale.sale_number,
+            purchased_at=sale.sold_at,
+            total=sale.total,
+            paid=sale.paid,
+            due=sale.due,
+        )
+        for sale in sales
+    ]

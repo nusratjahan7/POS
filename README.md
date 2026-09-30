@@ -115,5 +115,6 @@ npm run build
 | Foundation + Auth     | ✅     |
 | Sales Management      | ✅     |
 | Sales Returns & Refunds | ✅   |
+| Dues Management (Customer & Supplier Ledgers) | ✅ |
 
 See `backend/README.md` and `frontend/README.md` for module-level detail.

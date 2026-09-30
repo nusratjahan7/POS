@@ -17,7 +17,7 @@ import secrets
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
@@ -40,16 +40,10 @@ from app.repositories.sale import SaleRepository
 from app.schemas.sale import SaleCreate, SaleItemCreate, SalePaymentCreate
 from app.services.customer import CustomerService
 from app.services.inventory import InventoryService
+from app.utils.money import ZERO, money
 from app.utils.pagination import PageParams
 
-CENT = Decimal("0.01")
 HUNDRED = Decimal("100")
-ZERO = Decimal("0.00")
-
-
-def money(value: Decimal) -> Decimal:
-    """Round a computed amount to the currency's two decimal places."""
-    return value.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
 class SaleService:

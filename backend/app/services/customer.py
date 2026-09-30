@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -19,10 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError, UnprocessableError
 from app.models.customer import Customer
 from app.models.customer_payment import CustomerPayment
+from app.models.sale import Sale
 from app.repositories.customer import CustomerRepository
 from app.repositories.customer_payment import CustomerPaymentRepository
 from app.repositories.sale import SaleRepository
 from app.schemas.customer import CustomerCreate, CustomerPaymentCreate, CustomerUpdate
+from app.schemas.ledger import LedgerStatement
+from app.services.ledger import LedgerService
 from app.utils.pagination import PageParams
 
 RECENT_LIMIT = 5
@@ -48,14 +51,32 @@ class CustomerService:
         *,
         search: str | None = None,
         is_active: bool | None = None,
+        has_dues: bool | None = None,
         sort: tuple[Any, bool] | None = None,
     ) -> tuple[Sequence[Customer], int]:
         return await self.customers.list_customers(
-            params, sort=sort, search=search, is_active=is_active
+            params, sort=sort, search=search, is_active=is_active, has_dues=has_dues
         )
 
     async def list_all(self) -> Sequence[Customer]:
         return await self.customers.list_all()
+
+    async def list_purchases(self, customer_id: uuid.UUID) -> Sequence[Sale]:
+        """The customer's sales, newest first — for their history screen."""
+        await self.get_or_404(customer_id)
+        return await self.sales.purchases_for_customer(customer_id)
+
+    async def ledger(
+        self,
+        customer_id: uuid.UUID,
+        *,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> LedgerStatement:
+        await self.get_or_404(customer_id)
+        return await LedgerService(self.session).customer_statement(
+            customer_id, date_from=date_from, date_to=date_to
+        )
 
     async def list_payments(
         self, customer_id: uuid.UUID, params: PageParams

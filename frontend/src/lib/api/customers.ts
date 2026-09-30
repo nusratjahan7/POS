@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api/client";
+import type { LedgerParams, LedgerStatement } from "@/lib/api/ledger";
 import { withQuery, type Page } from "@/lib/api/rbac";
 
 export type Customer = {
@@ -73,6 +74,8 @@ export type CustomerListParams = {
   page_size?: number;
   search?: string;
   is_active?: boolean;
+  /** Only customers who still owe something (outstanding balance). */
+  has_dues?: boolean;
   sort?: string;
 };
 
@@ -123,5 +126,12 @@ export const customersApi = {
 
   listPurchases(customerId: string): Promise<CustomerPurchase[]> {
     return apiRequest<CustomerPurchase[]>(`/customers/${customerId}/purchases`);
+  },
+
+  /** The customer's account statement (date, reference, debit, credit, balance). */
+  ledger(customerId: string, params: LedgerParams = {}): Promise<LedgerStatement> {
+    return apiRequest<LedgerStatement>(
+      withQuery(`/customers/${customerId}/ledger`, { ...params }),
+    );
   },
 };

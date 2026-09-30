@@ -2,6 +2,7 @@ import {
   BarChart3,
   Boxes,
   FolderTree,
+  HandCoins,
   LayoutDashboard,
   Package,
   Receipt,
@@ -12,6 +13,7 @@ import {
   Tag,
   Truck,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -51,6 +53,8 @@ export const navGroups: NavGroup[] = [
       { title: "Suppliers", href: "/suppliers", icon: Truck, status: "available", permission: "suppliers:read" },
       { title: "Purchases", href: "/purchases", icon: ShoppingCart, status: "available", permission: "purchases:view" },
       { title: "Customers", href: "/customers", icon: Users, status: "available", permission: "customers:read" },
+      { title: "Customer Dues", href: "/dues/customers", icon: Wallet, status: "available", permission: "customers:read" },
+      { title: "Supplier Dues", href: "/dues/suppliers", icon: HandCoins, status: "available", permission: "suppliers:read" },
     ],
   },
   {

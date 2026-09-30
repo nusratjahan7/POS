@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -11,6 +12,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.db.mixins import UUIDPrimaryKeyMixin
 from app.models.supplier import Supplier
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 MONEY = Numeric(12, 2)
 
@@ -48,3 +52,4 @@ class SupplierPayment(Base, UUIDPrimaryKeyMixin):
     )
 
     supplier: Mapped[Supplier] = relationship(lazy="joined")
+    user: Mapped[User | None] = relationship("User", lazy="joined")
