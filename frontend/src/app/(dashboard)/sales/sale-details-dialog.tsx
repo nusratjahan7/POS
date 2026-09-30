@@ -1,13 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer, RotateCcw } from "lucide-react";
-import { toast } from "sonner";
 
+import { SaleReturnDialog } from "@/app/(dashboard)/sales/sale-return-dialog";
 import { Can } from "@/components/auth/can";
 import { InvoicePreviewDialog } from "@/components/invoice/invoice-preview-dialog";
-import { PaymentStatusBadge, SaleStatusBadge } from "@/components/sales/status-badge";
+import {
+  PaymentStatusBadge,
+  ReturnStatusBadge,
+  SaleStatusBadge,
+} from "@/components/sales/status-badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,8 +22,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ErrorState } from "@/components/ui/error-state";
-import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -31,7 +33,7 @@ import {
 } from "@/components/ui/table";
 import { describeError } from "@/lib/api/client";
 import { salesApi } from "@/lib/api/sales";
-import { formatDateTime, formatMoney, formatQuantity } from "@/lib/format";
+import { formatAmount, formatDateTime, formatQuantity } from "@/lib/format";
 
 function Row({
   label,
@@ -57,8 +59,8 @@ function Row({
 }
 
 /**
- * One sale in full: its invoice details, lines, tenders, totals and timestamps,
- * with the receipt actions (print / reprint) and the refund reversal.
+ * One sale in full: its invoice details, lines, tenders, totals, return history
+ * and timestamps, with the receipt actions (print / reprint) and the return flow.
  *
  * Fetches the same receipt payload the print view uses, so the two share one
  * cache entry and cost one request between them.
@@ -74,31 +76,29 @@ export function SaleDetailsDialog({
 }) {
   const queryClient = useQueryClient();
   const [printOpen, setPrintOpen] = React.useState(false);
-  const [refundOpen, setRefundOpen] = React.useState(false);
-  const [reason, setReason] = React.useState("");
+  const [returnOpen, setReturnOpen] = React.useState(false);
 
   const receiptQuery = useQuery({
     queryKey: ["sale-receipt", saleId],
     queryFn: () => salesApi.receipt(saleId),
   });
-  const receipt = receiptQuery.data;
-  const sale = receipt?.sale;
-  const currency = receipt?.business.currency ?? "USD";
-  const money = (value: string | number | null | undefined) => formatMoney(value, currency);
-
-  const refundMutation = useMutation({
-    mutationFn: () => salesApi.refund(saleId, { reason: reason.trim() || null }),
-    onSuccess: (updated) => {
-      toast.success(`${updated.sale_number} refunded`);
-      setRefundOpen(false);
-      setReason("");
-      void queryClient.invalidateQueries({ queryKey: ["sale-receipt", saleId] });
-      onChanged();
-    },
-    onError: (cause) => toast.error(describeError(cause)),
+  const returnsQuery = useQuery({
+    queryKey: ["sale-returns", saleId],
+    queryFn: () => salesApi.listReturns(saleId),
   });
 
-  const refundable = sale?.status === "completed";
+  const receipt = receiptQuery.data;
+  const sale = receipt?.sale;
+  const money = (value: string | number | null | undefined) => formatAmount(value);
+  const returns = returnsQuery.data ?? [];
+
+  function handleReturned() {
+    void queryClient.invalidateQueries({ queryKey: ["sale-receipt", saleId] });
+    void queryClient.invalidateQueries({ queryKey: ["sale-returns", saleId] });
+    onChanged();
+  }
+
+  const returnable = sale?.status === "completed";
 
   return (
     <>
@@ -111,9 +111,7 @@ export function SaleDetailsDialog({
               {sale ? <PaymentStatusBadge sale={sale} /> : null}
             </div>
             <DialogDescription>
-              {receipt
-                ? `${receipt.business.name} · ${receipt.branch.name}`
-                : "Loading the sale…"}
+              {receipt ? `${receipt.business.name} · ${receipt.branch.name}` : "Loading the sale…"}
             </DialogDescription>
           </DialogHeader>
 
@@ -189,11 +187,15 @@ export function SaleDetailsDialog({
                   <Row label={receipt.business.tax_label} value={money(sale.tax)} />
                 ) : null}
                 <Row label="Total" value={money(sale.total)} strong />
-                <Row label="Paid" value={money(sale.paid)} />
+                {/* What the customer handed over, not the amount applied. */}
+                <Row label="Paid" value={money(sale.received_amount)} />
                 {Number(sale.change_amount) > 0 ? (
                   <Row label="Change" value={money(sale.change_amount)} />
                 ) : null}
                 {Number(sale.due) > 0 ? <Row label="Due" value={money(sale.due)} strong /> : null}
+                {Number(sale.returned_amount) > 0 ? (
+                  <Row label="Returned" value={`-${money(sale.returned_amount)}`} />
+                ) : null}
               </div>
 
               <div className="flex flex-col gap-2">
@@ -215,6 +217,56 @@ export function SaleDetailsDialog({
                 </div>
               </div>
 
+              <div className="flex flex-col gap-2">
+                <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                  Returns
+                </h3>
+                {returnsQuery.isPending ? (
+                  <Skeleton className="h-16 w-full" />
+                ) : returns.length === 0 ? (
+                  <p className="text-muted-foreground rounded-md border p-3 text-sm">
+                    Nothing has been returned from this sale.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {returns.map((record) => (
+                      <div key={record.id} className="flex flex-col gap-2 rounded-md border p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-xs font-medium">
+                              {record.return_number}
+                            </span>
+                            <ReturnStatusBadge status={record.status} />
+                          </div>
+                          <span className="font-medium tabular-nums">
+                            {money(record.refund_amount)}
+                          </span>
+                        </div>
+                        <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                          <span>{formatDateTime(record.completed_at ?? record.created_at)}</span>
+                          <span>
+                            {Number(record.cash_refund) > 0
+                              ? `${money(record.cash_refund)} paid out`
+                              : "settled against balance"}
+                          </span>
+                          {record.payment_method ? <span>{record.payment_method.name}</span> : null}
+                          {record.created_by ? <span>by {record.created_by.full_name}</span> : null}
+                        </div>
+                        {record.reason ? <p className="text-sm">{record.reason}</p> : null}
+                        <ul className="text-muted-foreground text-xs">
+                          {record.items.map((item) => (
+                            <li key={item.id}>
+                              {item.product_name} × {formatQuantity(item.quantity)} —{" "}
+                              {money(item.line_total)}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="flex flex-col gap-1 rounded-md border p-3">
                 <Row label="Sold" value={formatDateTime(sale.sold_at)} />
                 <Row label="Created" value={formatDateTime(sale.created_at)} />
@@ -222,9 +274,7 @@ export function SaleDetailsDialog({
                   <>
                     <Row label="Refunded" value={formatDateTime(sale.refunded_at)} />
                     <Row label="Refunded by" value={sale.refunded_by?.full_name ?? "—"} />
-                    {sale.refund_reason ? (
-                      <Row label="Reason" value={sale.refund_reason} />
-                    ) : null}
+                    {sale.refund_reason ? <Row label="Reason" value={sale.refund_reason} /> : null}
                   </>
                 ) : null}
               </div>
@@ -245,12 +295,12 @@ export function SaleDetailsDialog({
               <Can permission="sales:refund">
                 <Button
                   type="button"
-                  variant="destructive"
-                  onClick={() => setRefundOpen(true)}
-                  disabled={!refundable}
+                  variant="secondary"
+                  onClick={() => setReturnOpen(true)}
+                  disabled={!returnable}
                 >
                   <RotateCcw className="size-4" />
-                  Refund
+                  Return
                 </Button>
               </Can>
               <Button type="button" variant="ghost" onClick={onClose}>
@@ -265,53 +315,12 @@ export function SaleDetailsDialog({
         <InvoicePreviewDialog saleId={saleId} onClose={() => setPrintOpen(false)} />
       ) : null}
 
-      {refundOpen ? (
-        <Dialog
-          open
-          onOpenChange={(next) => !next && !refundMutation.isPending && setRefundOpen(false)}
-        >
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Refund this sale?</DialogTitle>
-              <DialogDescription>
-                Every item goes back into stock, any balance is taken off the customer&apos;s
-                account, and the sale is marked refunded. The sale&apos;s figures are kept as
-                history; this cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <Field
-              label="Reason"
-              htmlFor="refund-reason"
-              hint="Optional. Recorded on the sale for the audit trail."
-            >
-              <Input
-                id="refund-reason"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                placeholder="e.g. damaged, customer changed their mind"
-                autoComplete="off"
-              />
-            </Field>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setRefundOpen(false)}
-                disabled={refundMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => refundMutation.mutate()}
-                disabled={refundMutation.isPending}
-              >
-                {refundMutation.isPending ? "Refunding…" : "Refund sale"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      {returnOpen && sale ? (
+        <SaleReturnDialog
+          sale={sale}
+          onClose={() => setReturnOpen(false)}
+          onReturned={handleReturned}
+        />
       ) : null}
     </>
   );

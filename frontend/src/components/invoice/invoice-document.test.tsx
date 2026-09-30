@@ -36,6 +36,8 @@ const receipt: SaleReceipt = {
     paid: "19.80",
     due: "0.00",
     change_amount: "5.20",
+    returned_amount: "0.00",
+    received_amount: "25.00",
     status: "completed",
     note: "Delivery",
     items: [

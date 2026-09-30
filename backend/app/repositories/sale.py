@@ -32,6 +32,15 @@ class SaleRepository(BaseRepository[Sale]):
         stmt = select(Sale.id).where(Sale.sale_number == number).limit(1)
         return (await self.session.execute(stmt)).scalar_one_or_none() is not None
 
+    async def lock(self, sale_id: uuid.UUID) -> None:
+        """Take a row lock on a sale so concurrent returns serialize.
+
+        ``select(Sale.id)`` rather than the entity: ``Sale`` eager-loads joined
+        relationships and ``FOR UPDATE`` cannot touch the nullable side of an
+        outer join. Held until the caller commits.
+        """
+        await self.session.execute(select(Sale.id).where(Sale.id == sale_id).with_for_update())
+
     async def cashiers(self) -> Sequence[tuple[uuid.UUID, str]]:
         """Distinct staff who have rung up sales, ordered by name."""
         stmt = (

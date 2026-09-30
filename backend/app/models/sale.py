@@ -61,6 +61,8 @@ class Sale(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         CheckConstraint("paid >= 0", name="paid_non_negative"),
         CheckConstraint("due >= 0", name="due_non_negative"),
         CheckConstraint("change_amount >= 0", name="change_amount_non_negative"),
+        CheckConstraint("returned_amount >= 0", name="returned_amount_non_negative"),
+        CheckConstraint("returned_amount <= total", name="returned_amount_within_total"),
         CheckConstraint("total = subtotal - discount + tax", name="total_math"),
         CheckConstraint("due = total - paid", name="due_math"),
     )
@@ -99,6 +101,12 @@ class Sale(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     paid: Mapped[Decimal] = mapped_column(MONEY, server_default=text("0"), nullable=False)
     due: Mapped[Decimal] = mapped_column(MONEY, server_default=text("0"), nullable=False)
     change_amount: Mapped[Decimal] = mapped_column(MONEY, server_default=text("0"), nullable=False)
+    #: Value of goods returned so far (across all completed returns). The sale's
+    #: own total/paid/due are the arithmetic the DB constrains, so returns are
+    #: tracked beside them rather than rewriting history.
+    returned_amount: Mapped[Decimal] = mapped_column(
+        MONEY, server_default=text("0"), nullable=False
+    )
 
     status: Mapped[str] = mapped_column(
         String(16), server_default=text("'completed'"), nullable=False
@@ -146,6 +154,22 @@ class Sale(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         a page of sales and needs no denormalised column.
         """
         return len(self.items)
+
+    @property
+    def received_amount(self) -> Decimal:
+        """What the customer actually handed over.
+
+        Cash tendered where it was recorded, otherwise the amount applied. Change
+        is handed back out of this, so it is always ``paid`` plus what went back
+        over the counter. ``payments`` is eager-loaded, so this is free.
+        """
+        return sum(
+            (
+                payment.tendered if payment.tendered is not None else payment.amount
+                for payment in self.payments
+            ),
+            Decimal("0.00"),
+        )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Sale {self.sale_number} {self.total}>"

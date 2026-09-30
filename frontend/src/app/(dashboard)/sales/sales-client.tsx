@@ -26,8 +26,7 @@ import {
   type SaleStatus,
   type SaleSummary,
 } from "@/lib/api/sales";
-import { businessApi } from "@/lib/api/settings";
-import { formatDateTime, formatMoney } from "@/lib/format";
+import { formatAmount, formatDateTime } from "@/lib/format";
 
 const ALL = "all";
 
@@ -55,7 +54,6 @@ const SORT_OPTIONS = [
 
 export function SalesClient() {
   const canRead = useCan("sales:read");
-  const canReadBusiness = useCan("business:read");
 
   const table = useDataTable();
   const [customer, setCustomer] = React.useState(ALL);
@@ -113,14 +111,7 @@ export function SalesClient() {
     enabled: canRead,
   });
 
-  const businessQuery = useQuery({
-    queryKey: ["business"],
-    queryFn: () => businessApi.get(),
-    enabled: canReadBusiness,
-  });
-
   const sales = listQuery.data?.items ?? [];
-  const currency = businessQuery.data?.currency ?? "USD";
 
   const customerOptions = React.useMemo(
     () => [
@@ -197,7 +188,7 @@ export function SalesClient() {
       hideBelow: "lg",
       cell: (sale) => (
         <span className="text-muted-foreground text-sm tabular-nums">
-          {formatMoney(sale.subtotal, currency)}
+          {formatAmount(sale.subtotal)}
         </span>
       ),
     },
@@ -208,7 +199,7 @@ export function SalesClient() {
       hideBelow: "lg",
       cell: (sale) => (
         <span className="text-muted-foreground text-sm tabular-nums">
-          {formatMoney(sale.discount, currency)}
+          {formatAmount(sale.discount)}
         </span>
       ),
     },
@@ -217,16 +208,7 @@ export function SalesClient() {
       header: "Total",
       align: "right",
       cell: (sale) => (
-        <span className="font-medium tabular-nums">{formatMoney(sale.total, currency)}</span>
-      ),
-    },
-    {
-      id: "paid",
-      header: "Paid",
-      align: "right",
-      hideBelow: "lg",
-      cell: (sale) => (
-        <span className="text-sm tabular-nums">{formatMoney(sale.paid, currency)}</span>
+        <span className="font-medium tabular-nums">{formatAmount(sale.total)}</span>
       ),
     },
     {
@@ -235,7 +217,7 @@ export function SalesClient() {
       align: "right",
       hideBelow: "md",
       cell: (sale) => (
-        <span className="text-sm tabular-nums">{formatMoney(sale.due, currency)}</span>
+        <span className="text-sm tabular-nums">{formatAmount(sale.due)}</span>
       ),
     },
     {
@@ -252,6 +234,8 @@ export function SalesClient() {
       id: "actions",
       header: <span className="sr-only">Actions</span>,
       align: "right",
+      // The table is wider than the card, so keep these reachable without scrolling.
+      pinRight: true,
       cell: (sale) => (
         <div className="flex items-center justify-end gap-1">
           <Button

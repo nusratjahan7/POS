@@ -23,6 +23,8 @@ from app.models.role import Role
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.models.sale_payment import SalePayment
+from app.models.sale_return import SaleReturn
+from app.models.sale_return_item import SaleReturnItem
 from app.models.stock_level import StockLevel
 from app.models.stock_movement import StockMovement
 from app.models.supplier import Supplier
@@ -48,6 +50,8 @@ __all__ = [
     "Sale",
     "SaleItem",
     "SalePayment",
+    "SaleReturn",
+    "SaleReturnItem",
     "StockLevel",
     "StockMovement",
     "Supplier",

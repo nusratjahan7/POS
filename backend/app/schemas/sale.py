@@ -53,12 +53,6 @@ class SaleCreate(BaseModel):
     payments: list[SalePaymentCreate] = Field(min_length=1)
 
 
-class SaleRefundRequest(BaseModel):
-    """A full-sale reversal. The reason is recorded on the sale for the audit trail."""
-
-    reason: str | None = Field(default=None, max_length=255)
-
-
 class SaleItemRead(ORMModel):
     id: uuid.UUID
     product_id: uuid.UUID
@@ -123,6 +117,8 @@ class SaleSummary(ORMModel):
     status: str
     #: Distinct product lines; eager-loaded, so the list costs no extra query.
     item_count: int
+    #: What the customer handed over (paid plus change given back).
+    received_amount: Decimal
 
 
 class SaleRead(ORMModel):
@@ -139,6 +135,10 @@ class SaleRead(ORMModel):
     paid: Decimal
     due: Decimal
     change_amount: Decimal
+    #: Value of goods returned so far, across every completed return.
+    returned_amount: Decimal
+    #: What the customer handed over (paid plus change given back).
+    received_amount: Decimal
     status: str
     note: str | None
     items: list[SaleItemRead]

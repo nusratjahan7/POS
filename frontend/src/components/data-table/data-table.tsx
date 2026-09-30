@@ -30,6 +30,11 @@ export type DataTableColumn<T> = {
   headClassName?: string;
   /** Hide the column below this breakpoint. */
   hideBelow?: Breakpoint;
+  /**
+   * Keep the column pinned to the right edge while the table scrolls sideways.
+   * For an actions column on a wide table, so it is never scrolled out of reach.
+   */
+  pinRight?: boolean;
 };
 
 export type DataTableProps<T> = {
@@ -57,6 +62,10 @@ const HIDE_BELOW: Record<Breakpoint, string> = {
   md: "hidden md:table-cell",
   lg: "hidden lg:table-cell",
 };
+
+/** A pinned column rides above the scrolling ones and keeps its own background. */
+const PIN_RIGHT =
+  "sticky right-0 z-10 bg-card shadow-[inset_1px_0_0_0_var(--border)] group-hover:bg-muted/40";
 
 /**
  * Presentational table that owns the loading / error / empty states and column
@@ -123,6 +132,7 @@ function DataTable<T>({
                 className={cn(
                   ALIGN[column.align ?? "left"],
                   column.hideBelow && HIDE_BELOW[column.hideBelow],
+                  column.pinRight && PIN_RIGHT,
                   column.headClassName,
                 )}
               >
@@ -140,6 +150,7 @@ function DataTable<T>({
                   className={cn(
                     ALIGN[column.align ?? "left"],
                     column.hideBelow && HIDE_BELOW[column.hideBelow],
+                    column.pinRight && PIN_RIGHT,
                     column.className,
                   )}
                 >

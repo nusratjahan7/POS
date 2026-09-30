@@ -78,12 +78,16 @@ export type Sale = {
   paid: string;
   due: string;
   change_amount: string;
+  /** What the customer handed over: paid plus the change given back. */
+  received_amount: string;
   status: SaleStatus;
   note: string | null;
   items: SaleItem[];
   payments: SalePayment[];
   sold_at: string;
   created_at: string;
+  /** Value of goods returned so far, across every completed return. */
+  returned_amount: string;
   refunded_at: string | null;
   refunded_by: { id: string; full_name: string } | null;
   refund_reason: string | null;
@@ -130,6 +134,8 @@ export type SaleSummary = {
   paid: string;
   due: string;
   change_amount: string;
+  /** What the customer handed over: paid plus the change given back. */
+  received_amount: string;
   status: SaleStatus;
   item_count: number;
 };
@@ -140,8 +146,58 @@ export type SaleCashierOption = {
   full_name: string;
 };
 
-export type SaleRefundPayload = {
+export type SaleReturnStatus = "requested" | "approved" | "completed" | "cancelled";
+
+export type SaleReturnItem = {
+  id: string;
+  sale_item_id: string;
+  product_id: string;
+  product_name: string;
+  sku: string;
+  quantity: string;
+  unit_price: string;
+  /** The refund this line carries. */
+  line_total: string;
+};
+
+/** A return document: goods coming back from a sale, and the refund they carry. */
+export type SaleReturn = {
+  id: string;
+  return_number: string;
+  status: SaleReturnStatus;
+  reason: string | null;
+  note: string | null;
+  refund_amount: string;
+  /** The part of `refund_amount` that cleared what the customer still owed. */
+  credit_reversed: string;
+  /** The part actually paid back. */
+  cash_refund: string;
+  payment_method: SalePaymentMethod | null;
+  refund_reference: string | null;
+  created_by: { id: string; full_name: string } | null;
+  completed_by: { id: string; full_name: string } | null;
+  created_at: string;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  items: SaleReturnItem[];
+};
+
+export type SaleReturnItemInput = {
+  sale_item_id: string;
+  quantity: string;
+};
+
+/**
+ * What the operator posts to hand goods back.
+ *
+ * No amounts: the server prices the refund from the sale line's own net.
+ */
+export type SaleReturnPayload = {
+  items: SaleReturnItemInput[];
   reason?: string | null;
+  note?: string | null;
+  payment_method_id?: string | null;
+  reference?: string | null;
 };
 
 export type SaleListParams = {
@@ -186,8 +242,21 @@ export const salesApi = {
     return apiRequest<SaleCashierOption[]>("/sales/cashiers");
   },
 
-  /** Reverse a completed sale: restock it, unwind any credit, mark it refunded. */
-  refund(saleId: string, payload: SaleRefundPayload = {}): Promise<Sale> {
-    return apiRequest<Sale>(`/sales/${saleId}/refund`, { method: "POST", body: payload });
+  /** Return goods from a sale: restocks, refunds and updates the sale. */
+  createReturn(saleId: string, payload: SaleReturnPayload): Promise<SaleReturn> {
+    return apiRequest<SaleReturn>(`/sales/${saleId}/returns`, { method: "POST", body: payload });
+  },
+
+  /** A sale's return history, newest first. */
+  listReturns(saleId: string): Promise<SaleReturn[]> {
+    return apiRequest<SaleReturn[]>(`/sales/${saleId}/returns`);
+  },
+
+  /** Cancel a return that has not been applied yet. */
+  cancelReturn(saleId: string, returnId: string): Promise<SaleReturn> {
+    return apiRequest<SaleReturn>(`/sales/${saleId}/returns/${returnId}/cancel`, {
+      method: "POST",
+      body: {},
+    });
   },
 };

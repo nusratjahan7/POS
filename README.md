@@ -113,5 +113,7 @@ npm run build
 | Module                | Status |
 | --------------------- | ------ |
 | Foundation + Auth     | ✅     |
+| Sales Management      | ✅     |
+| Sales Returns & Refunds | ✅   |
 
 See `backend/README.md` and `frontend/README.md` for module-level detail.

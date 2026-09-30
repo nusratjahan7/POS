@@ -1,8 +1,8 @@
 import { Badge } from "@/components/ui/badge";
-import type { PaymentStatus, SaleStatus } from "@/lib/api/sales";
+import type { PaymentStatus, SaleReturnStatus, SaleStatus } from "@/lib/api/sales";
 import { paymentStatusOf } from "@/lib/sales/status";
 
-type BadgeVariant = "success" | "warning" | "destructive" | "outline";
+type BadgeVariant = "success" | "warning" | "destructive" | "outline" | "info";
 
 const SALE_STATUS: Record<SaleStatus, { label: string; variant: BadgeVariant }> = {
   completed: { label: "Completed", variant: "success" },
@@ -25,5 +25,18 @@ export function SaleStatusBadge({ status }: { status: SaleStatus }) {
 /** The single rendering of a sale's settlement state, derived from its figures. */
 export function PaymentStatusBadge({ sale }: { sale: { paid: string; due: string } }) {
   const badge = PAYMENT_STATUS[paymentStatusOf(sale)];
+  return <Badge variant={badge.variant}>{badge.label}</Badge>;
+}
+
+const RETURN_STATUS: Record<SaleReturnStatus, { label: string; variant: BadgeVariant }> = {
+  requested: { label: "Requested", variant: "warning" },
+  approved: { label: "Approved", variant: "info" },
+  completed: { label: "Completed", variant: "success" },
+  cancelled: { label: "Cancelled", variant: "outline" },
+};
+
+/** A return's lifecycle state. */
+export function ReturnStatusBadge({ status }: { status: SaleReturnStatus }) {
+  const badge = RETURN_STATUS[status] ?? { label: status, variant: "outline" as const };
   return <Badge variant={badge.variant}>{badge.label}</Badge>;
 }

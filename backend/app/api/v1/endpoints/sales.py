@@ -14,6 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, require_permissions
+from app.core.exceptions import NotFoundError
 from app.core.permissions import PermissionCode
 from app.repositories.sale import SaleRepository
 from app.schemas.common import Page
@@ -23,11 +24,12 @@ from app.schemas.sale import (
     SaleCreate,
     SaleRead,
     SaleReceipt,
-    SaleRefundRequest,
     SaleStatus,
     SaleSummary,
 )
+from app.schemas.sale_return import SaleReturnCreate, SaleReturnRead
 from app.services.sale import SaleService
+from app.services.sale_return import SaleReturnService
 from app.utils.sorting import parse_sort
 
 router = APIRouter(prefix="/sales", tags=["sales"])
@@ -106,19 +108,51 @@ async def get_sale(session: SessionDep, sale_id: uuid.UUID) -> SaleRead:
 
 
 @router.post(
-    "/{sale_id}/refund",
-    response_model=SaleRead,
-    summary="Refund a sale (restock it, unwind any credit, mark it refunded)",
+    "/{sale_id}/returns",
+    response_model=SaleReturnRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Return goods from a sale (restock it, refund it, update the sale)",
     dependencies=[Depends(require_permissions(PermissionCode.SALES_REFUND))],
 )
-async def refund_sale(
+async def create_sale_return(
     session: SessionDep,
     actor: CurrentUser,
     sale_id: uuid.UUID,
-    payload: SaleRefundRequest,
-) -> SaleRead:
-    sale = await SaleService(session).refund(sale_id, reason=payload.reason, actor_id=actor.id)
-    return SaleRead.model_validate(sale)
+    payload: SaleReturnCreate,
+) -> SaleReturnRead:
+    record = await SaleReturnService(session).create(sale_id, payload, actor_id=actor.id)
+    return SaleReturnRead.model_validate(record)
+
+
+@router.get(
+    "/{sale_id}/returns",
+    response_model=list[SaleReturnRead],
+    summary="A sale's return history",
+    dependencies=[Depends(require_permissions(PermissionCode.SALES_READ))],
+)
+async def list_sale_returns(session: SessionDep, sale_id: uuid.UUID) -> list[SaleReturnRead]:
+    records = await SaleReturnService(session).list_for_sale(sale_id)
+    return [SaleReturnRead.model_validate(record) for record in records]
+
+
+@router.post(
+    "/{sale_id}/returns/{return_id}/cancel",
+    response_model=SaleReturnRead,
+    summary="Cancel a return that has not been applied",
+    dependencies=[Depends(require_permissions(PermissionCode.SALES_REFUND))],
+)
+async def cancel_sale_return(
+    session: SessionDep,
+    actor: CurrentUser,
+    sale_id: uuid.UUID,
+    return_id: uuid.UUID,
+) -> SaleReturnRead:
+    service = SaleReturnService(session)
+    record = await service.get_or_404(return_id)
+    if record.sale_id != sale_id:
+        raise NotFoundError("Return not found.", code="sale_return_not_found")
+    cancelled = await service.cancel(return_id, actor_id=actor.id)
+    return SaleReturnRead.model_validate(cancelled)
 
 
 @router.get(
