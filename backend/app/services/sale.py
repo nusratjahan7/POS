@@ -35,11 +35,12 @@ from app.repositories.branch import BranchRepository
 from app.repositories.business import BusinessRepository
 from app.repositories.customer import CustomerRepository
 from app.repositories.payment_method import PaymentMethodRepository
-from app.repositories.product import ProductRepository
 from app.repositories.register import RegisterRepository
 from app.repositories.sale import SaleRepository
-from app.schemas.sale import SaleCreate, SaleItemCreate, SalePaymentCreate
+from app.schemas.discount import DiscountLineInput
+from app.schemas.sale import SaleCreate, SalePaymentCreate
 from app.services.customer import CustomerService
+from app.services.discount import DiscountService
 from app.services.inventory import InventoryService
 from app.services.register_session import RegisterSessionService
 from app.utils.money import ZERO, money
@@ -52,7 +53,6 @@ class SaleService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.sales = SaleRepository(session)
-        self.products = ProductRepository(session)
         self.branches = BranchRepository(session)
         self.business = BusinessRepository(session)
         self.customers = CustomerRepository(session)
@@ -61,6 +61,7 @@ class SaleService:
         self.inventory = InventoryService(session)
         self.credit = CustomerService(session)
         self.cash = RegisterSessionService(session)
+        self.discounts = DiscountService(session)
 
     # --- Reads -------------------------------------------------------------
     def _detail_query(self, sale_id: uuid.UUID) -> Any:
@@ -165,63 +166,6 @@ class SaleService:
             return money(net - net / (1 + rate))
         return money(net * rate)
 
-    async def _build_items(self, rows: Sequence[SaleItemCreate]) -> tuple[list[SaleItem], Decimal]:
-        """Price the basket server-side and snapshot what was sold."""
-        seen: set[uuid.UUID] = set()
-        items: list[SaleItem] = []
-        subtotal = ZERO
-
-        for row in rows:
-            if row.product_id in seen:
-                raise UnprocessableError(
-                    "The same product appears twice on this sale.",
-                    code="duplicate_sale_item",
-                    details=[{"field": "items", "message": "Duplicate product."}],
-                )
-            seen.add(row.product_id)
-
-            product = await self.products.get(row.product_id)
-            if product is None or product.is_deleted or not product.is_active:
-                raise UnprocessableError(
-                    "A product on this sale is no longer available.",
-                    code="unknown_product",
-                    details=[
-                        {"field": "items", "message": f"Unavailable product {row.product_id}."}
-                    ],
-                )
-
-            unit_price = (
-                product.discount_price
-                if product.discount_price is not None
-                else product.selling_price
-            )
-            unit_price = money(unit_price)
-            line_subtotal = money(row.quantity * unit_price)
-            discount = money(row.discount)
-            if discount > line_subtotal:
-                raise UnprocessableError(
-                    f"The discount on {product.name} is more than the line total.",
-                    code="discount_exceeds_line",
-                    details=[{"field": "items", "message": "Line discount too large."}],
-                )
-
-            items.append(
-                SaleItem(
-                    product_id=product.id,
-                    product_name=product.name,
-                    sku=product.sku,
-                    unit=product.unit,
-                    quantity=row.quantity,
-                    unit_price=unit_price,
-                    discount=discount,
-                    subtotal=line_subtotal,
-                    line_total=line_subtotal - discount,
-                )
-            )
-            subtotal += line_subtotal
-
-        return items, money(subtotal)
-
     async def _build_payments(
         self, rows: Sequence[SalePaymentCreate]
     ) -> tuple[list[SalePayment], Decimal, Decimal, Decimal]:
@@ -295,21 +239,37 @@ class SaleService:
         register = await self._validate_register(payload.register_id, branch.id)
         cash_session = await self.cash.require_open(register.id)
 
-        items, subtotal = await self._build_items(payload.items)
-
-        # Discount: line discounts plus any order-level discount, never more than
-        # the goods are worth.
-        order_discount = money(payload.order_discount)
-        line_discounts = sum((item.discount for item in items), ZERO)
-        discount = money(line_discounts + order_discount)
-        if discount > subtotal:
-            raise UnprocessableError(
-                "The discount cannot exceed the subtotal.",
-                code="discount_exceeds_subtotal",
-                details=[{"field": "order_discount", "message": "Greater than the subtotal."}],
+        # Pricing — unit prices, promotions, the coupon and any manual discount —
+        # is the discount engine's job. The client's figures are never trusted.
+        pricing = await self.discounts.price(
+            [
+                DiscountLineInput(
+                    product_id=row.product_id, quantity=row.quantity, discount=row.discount
+                )
+                for row in payload.items
+            ],
+            customer_id=payload.customer_id,
+            coupon_code=payload.coupon_code,
+            order_discount=payload.order_discount,
+        )
+        items = [
+            SaleItem(
+                product_id=line.product_id,
+                product_name=line.product_name,
+                sku=line.sku,
+                unit=line.unit,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+                discount=line.discount,
+                subtotal=line.subtotal,
+                line_total=line.line_total,
             )
+            for line in pricing.lines
+        ]
+        subtotal = pricing.subtotal
+        discount = pricing.total_discount
 
-        net = money(subtotal - discount)
+        net = pricing.net
         tax = self._tax_for(net, business)
         inclusive = bool(business and business.tax_enabled and business.tax_inclusive)
         total = net if inclusive else money(net + tax)
@@ -397,6 +357,17 @@ class SaleService:
                     reference_id=sale.id,
                     user_id=actor_id,
                     note=f"Cash on {sale.sale_number}",
+                )
+
+            # What each promotion/coupon actually gave, for the receipt and for
+            # usage-limit counting.
+            if pricing.applied:
+                self.session.add_all(
+                    self.discounts.redemption_rows(
+                        pricing,
+                        sale_id=sale.id,
+                        customer_id=customer.id if customer is not None else None,
+                    )
                 )
 
             await self.session.commit()

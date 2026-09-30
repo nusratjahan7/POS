@@ -66,6 +66,7 @@ const receipt: SaleReceipt = {
         paid_at: "2026-01-01T10:30:00Z",
       },
     ],
+    discounts: [],
     sold_at: "2026-01-01T10:30:00Z",
     created_at: "2026-01-01T10:30:00Z",
     refunded_at: null,

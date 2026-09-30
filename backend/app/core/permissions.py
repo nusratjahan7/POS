@@ -60,6 +60,10 @@ class PermissionCode(StrEnum):
     SALES_VOID = "sales:void"
     SALES_REFUND = "sales:refund"
 
+    # Promotions
+    DISCOUNTS_READ = "discounts:read"
+    DISCOUNTS_WRITE = "discounts:write"
+
     # Customers
     CUSTOMERS_READ = "customers:read"
     CUSTOMERS_WRITE = "customers:write"
@@ -122,6 +126,8 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.SALES_READ, "View sales history"),
     PermissionSpec(PermissionCode.SALES_VOID, "Void sales"),
     PermissionSpec(PermissionCode.SALES_REFUND, "Issue refunds"),
+    PermissionSpec(PermissionCode.DISCOUNTS_READ, "View discount promotions and coupons"),
+    PermissionSpec(PermissionCode.DISCOUNTS_WRITE, "Create and edit discounts and coupons"),
     PermissionSpec(PermissionCode.CUSTOMERS_READ, "View customers"),
     PermissionSpec(PermissionCode.CUSTOMERS_WRITE, "Create and edit customers"),
     PermissionSpec(PermissionCode.REPORTS_VIEW, "View reports and analytics"),
@@ -183,6 +189,8 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.SALES_READ,
                 PermissionCode.SALES_VOID,
                 PermissionCode.SALES_REFUND,
+                PermissionCode.DISCOUNTS_READ,
+                PermissionCode.DISCOUNTS_WRITE,
                 PermissionCode.CUSTOMERS_READ,
                 PermissionCode.CUSTOMERS_WRITE,
                 PermissionCode.REPORTS_VIEW,

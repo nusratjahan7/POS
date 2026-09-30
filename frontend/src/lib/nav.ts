@@ -1,4 +1,5 @@
 import {
+  BadgePercent,
   Banknote,
   BarChart3,
   Boxes,
@@ -58,6 +59,7 @@ export const navGroups: NavGroup[] = [
       { title: "Customer Dues", href: "/dues/customers", icon: Wallet, status: "available", permission: "customers:read" },
       { title: "Supplier Dues", href: "/dues/suppliers", icon: HandCoins, status: "available", permission: "suppliers:read" },
       { title: "Expenses", href: "/expenses", icon: Banknote, status: "available", permission: "expenses:read" },
+      { title: "Discounts", href: "/discounts", icon: BadgePercent, status: "available", permission: "discounts:read" },
       { title: "Cash Sessions", href: "/cash-sessions", icon: Calculator, status: "available", permission: "registers:read" },
     ],
   },

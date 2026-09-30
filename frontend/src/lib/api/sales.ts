@@ -30,6 +30,8 @@ export type SaleCreatePayload = {
   customer_id?: string | null;
   note?: string | null;
   order_discount?: string;
+  /** A coupon to quote. The server validates it and prices the sale itself. */
+  coupon_code?: string | null;
   items: SaleItemInput[];
   payments: SalePaymentInput[];
 };
@@ -65,6 +67,13 @@ export type SalePayment = {
   paid_at: string;
 };
 
+/** A promotion or coupon that applied to the sale, for the receipt. */
+export type SaleDiscount = {
+  code: string | null;
+  name: string;
+  amount: string;
+};
+
 export type Sale = {
   id: string;
   sale_number: string;
@@ -85,6 +94,8 @@ export type Sale = {
   note: string | null;
   items: SaleItem[];
   payments: SalePayment[];
+  /** Promotions and coupons that applied (empty when none did). */
+  discounts: SaleDiscount[];
   sold_at: string;
   created_at: string;
   /** Value of goods returned so far, across every completed return. */

@@ -50,6 +50,8 @@ class SaleCreate(BaseModel):
     customer_id: uuid.UUID | None = None
     note: str | None = Field(default=None, max_length=255)
     order_discount: Money = Decimal("0")
+    #: A coupon to quote. Everything else (promotions, coupon rules) is the server's job.
+    coupon_code: str | None = Field(default=None, max_length=40)
     items: list[SaleItemCreate] = Field(min_length=1)
     payments: list[SalePaymentCreate] = Field(min_length=1)
 
@@ -88,6 +90,14 @@ class SalePaymentRead(ORMModel):
 class SaleUser(ORMModel):
     id: uuid.UUID
     full_name: str
+
+
+class SaleDiscountRead(ORMModel):
+    """A promotion or coupon that applied to the sale, for the receipt."""
+
+    code: str | None
+    name: str
+    amount: Decimal
 
 
 class SaleCashierOption(ORMModel):
@@ -144,6 +154,8 @@ class SaleRead(ORMModel):
     note: str | None
     items: list[SaleItemRead]
     payments: list[SalePaymentRead]
+    #: The promotions and coupons that applied (empty when none did).
+    discounts: list[SaleDiscountRead]
     sold_at: datetime
     created_at: datetime
     refunded_at: datetime | None

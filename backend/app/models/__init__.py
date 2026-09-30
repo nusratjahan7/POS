@@ -12,6 +12,13 @@ from app.models.cash_movement import CashMovement
 from app.models.category import Category
 from app.models.customer import Customer
 from app.models.customer_payment import CustomerPayment
+from app.models.discount import (
+    Discount,
+    DiscountBrand,
+    DiscountCategory,
+    DiscountProduct,
+)
+from app.models.discount_redemption import DiscountRedemption
 from app.models.expense import Expense
 from app.models.expense_category import ExpenseCategory
 from app.models.password_reset import PasswordResetToken
@@ -43,6 +50,11 @@ __all__ = [
     "Category",
     "Customer",
     "CustomerPayment",
+    "Discount",
+    "DiscountBrand",
+    "DiscountCategory",
+    "DiscountProduct",
+    "DiscountRedemption",
     "Expense",
     "ExpenseCategory",
     "PasswordResetToken",

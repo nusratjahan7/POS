@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { describeError } from "@/lib/api/client";
+import { discountsApi } from "@/lib/api/discounts";
 import { salesApi, type Sale } from "@/lib/api/sales";
 import { paymentMethodsApi, type PaymentMethodOption } from "@/lib/api/settings";
 import type { CartLine, CartTotals, PosCustomer } from "@/lib/pos/cart-store";
@@ -56,6 +57,8 @@ export function PosPaymentDialog({
   customer,
   branchId,
   registerId,
+  couponCode,
+  onCouponChange,
   currency,
   onClose,
   onComplete,
@@ -66,6 +69,8 @@ export function PosPaymentDialog({
   customer: PosCustomer | null;
   branchId: string;
   registerId: string;
+  couponCode: string;
+  onCouponChange: (code: string) => void;
   currency: string;
   onClose: () => void;
   onComplete: (sale: Sale) => void;
@@ -88,6 +93,31 @@ export function PosPaymentDialog({
     for (const method of methods) map.set(method.id, method);
     return map;
   }, [methods]);
+
+  // The server prices the discounts — the till only shows what it says. This is
+  // a preview; creating the sale recomputes everything authoritative.
+  const previewQuery = useQuery({
+    queryKey: [
+      "discount-preview",
+      couponCode,
+      customer?.id ?? null,
+      orderDiscount,
+      lines.map((line) => [line.productId, line.quantity, line.discount]),
+    ],
+    queryFn: () =>
+      discountsApi.validate({
+        customer_id: customer?.id ?? null,
+        coupon_code: couponCode || null,
+        order_discount: orderDiscount.toFixed(2),
+        items: lines.map((line) => ({
+          product_id: line.productId,
+          quantity: String(line.quantity),
+          discount: line.discount.toFixed(2),
+        })),
+      }),
+    enabled: lines.length > 0,
+    retry: false,
+  });
 
   // Before the cashier touches anything, the whole total sits on the default
   // method. Derived rather than stored, so it follows the total and needs no
@@ -160,6 +190,7 @@ export function PosPaymentDialog({
         branch_id: branchId,
         register_id: registerId,
         customer_id: customer?.id ?? null,
+        coupon_code: couponCode || null,
         note: note.trim() || null,
         order_discount: orderDiscount.toFixed(2),
         items: lines.map((line) => ({
@@ -393,6 +424,58 @@ export function PosPaymentDialog({
             </Button>
           </div>
         )}
+
+        <div className="flex flex-col gap-3 rounded-md border p-3">
+          <Field label="Coupon code" htmlFor="pos-coupon" hint="Validated by the server.">
+            <div className="flex items-center gap-2">
+              <Input
+                id="pos-coupon"
+                value={couponCode}
+                onChange={(event) => onCouponChange(event.target.value.toUpperCase())}
+                placeholder="e.g. SAVE10"
+                autoComplete="off"
+              />
+              {couponCode ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => onCouponChange("")}>
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+          </Field>
+
+          {previewQuery.data ? (
+            <div className="flex flex-col gap-1 text-sm">
+              {previewQuery.data.applied.length === 0 ? (
+                <span className="text-muted-foreground">No discounts apply to this cart.</span>
+              ) : (
+                previewQuery.data.applied.map((row) => (
+                  <div
+                    key={`${row.code ?? "auto"}-${row.name}`}
+                    className="flex items-center justify-between"
+                  >
+                    <span className="text-muted-foreground">
+                      {row.code ? `${row.code} · ` : ""}
+                      {row.name}
+                    </span>
+                    <span className="tabular-nums">− {money(Number(row.amount), currency)}</span>
+                  </div>
+                ))
+              )}
+              {Number(previewQuery.data.total_discount) > 0 ? (
+                <div className="flex items-center justify-between border-t pt-1 font-medium">
+                  <span>Discount total</span>
+                  <span className="tabular-nums">
+                    − {money(Number(previewQuery.data.total_discount), currency)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {couponCode && previewQuery.isError ? (
+            <p className="text-destructive text-sm">{describeError(previewQuery.error)}</p>
+          ) : null}
+        </div>
 
         <div className="flex flex-col gap-1 rounded-md border p-3 text-sm">
           <div className="flex items-center justify-between">

@@ -95,6 +95,7 @@ function saleFixture(overrides: Partial<Sale> = {}): Sale {
       },
     ],
     payments: [],
+    discounts: [],
     sold_at: "2026-09-29T10:00:00Z",
     created_at: "2026-09-29T10:00:00Z",
     returned_amount: "0.00",

@@ -23,6 +23,7 @@ from app.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 if TYPE_CHECKING:
     from app.models.branch import Branch
     from app.models.customer import Customer
+    from app.models.discount_redemption import DiscountRedemption
     from app.models.register import Register
     from app.models.sale_item import SaleItem
     from app.models.sale_payment import SalePayment
@@ -141,6 +142,12 @@ class Sale(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         lazy="selectin",
     )
     payments: Mapped[list[SalePayment]] = relationship(
+        back_populates="sale",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    #: Promotions and coupons that applied — the receipt's discount breakdown.
+    discounts: Mapped[list[DiscountRedemption]] = relationship(
         back_populates="sale",
         cascade="all, delete-orphan",
         lazy="selectin",

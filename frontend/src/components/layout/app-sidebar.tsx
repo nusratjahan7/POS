@@ -26,7 +26,7 @@ function AppSidebar() {
       <div
         className={cn(
           "border-sidebar-border flex h-14 shrink-0 items-center border-b",
-          collapsed ? "justify-center px-2" : "justify-between pl-4 pr-2",
+          collapsed ? "group/rail relative justify-center px-2" : "justify-between pl-4 pr-2",
         )}
       >
         <Brand collapsed={collapsed} />
@@ -37,7 +37,13 @@ function AppSidebar() {
               size="icon-sm"
               onClick={() => setCollapsed((value) => !value)}
               aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-              className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              className={cn(
+                "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                // Collapsed, the rail only fits the glyph: the toggle overlays it
+                // and fades in on hover or keyboard focus.
+                collapsed &&
+                  "bg-sidebar text-sidebar-foreground absolute inset-0 m-auto opacity-0 transition-opacity group-hover/rail:opacity-100 group-focus-within/rail:opacity-100",
+              )}
             >
               {collapsed ? (
                 <PanelLeftOpen className="size-4" />

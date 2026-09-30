@@ -72,7 +72,9 @@ def upgrade() -> None:
         sa.Column("closing_note", sa.String(length=255), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=NOW, nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=NOW, nullable=False),
-        sa.CheckConstraint(f"status IN ({SESSION_STATUSES})", name="ck_register_sessions_valid_status"),
+        sa.CheckConstraint(
+            f"status IN ({SESSION_STATUSES})", name="ck_register_sessions_valid_status"
+        ),
         sa.CheckConstraint(
             "opening_cash >= 0", name="ck_register_sessions_opening_cash_non_negative"
         ),

@@ -95,6 +95,7 @@ export function RegisterClient() {
   const held = useCartStore((state) => state.held);
   const branchId = useCartStore((state) => state.branchId);
   const registerId = useCartStore((state) => state.registerId);
+  const couponCode = useCartStore((state) => state.couponCode);
 
   const addLine = useCartStore((state) => state.addLine);
   const setQuantity = useCartStore((state) => state.setQuantity);
@@ -104,6 +105,7 @@ export function RegisterClient() {
   const setOrderDiscount = useCartStore((state) => state.setOrderDiscount);
   const setBranch = useCartStore((state) => state.setBranch);
   const setRegister = useCartStore((state) => state.setRegister);
+  const setCouponCode = useCartStore((state) => state.setCouponCode);
   const syncLimits = useCartStore((state) => state.syncLimits);
   const clear = useCartStore((state) => state.clear);
   const hold = useCartStore((state) => state.hold);
@@ -608,6 +610,8 @@ export function RegisterClient() {
           customer={customer}
           branchId={effectiveBranch}
           registerId={effectiveRegister}
+          couponCode={couponCode ?? ""}
+          onCouponChange={(code) => setCouponCode(code || null)}
           currency={currency}
           onClose={() => setCheckoutOpen(false)}
           onComplete={handleSaleComplete}

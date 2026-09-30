@@ -62,10 +62,13 @@ type CartState = {
   customer: PosCustomer | null;
   lines: CartLine[];
   orderDiscount: number;
+  /** A coupon to quote at checkout; the server validates it. */
+  couponCode: string | null;
   held: HeldCart[];
 
   setBranch: (branchId: string | null) => void;
   setRegister: (registerId: string | null) => void;
+  setCouponCode: (code: string | null) => void;
   addLine: (line: Omit<CartLine, "quantity" | "discount">, quantity?: number) => AddResult;
   setQuantity: (productId: string, quantity: number) => QuantityResult;
   setLineDiscount: (productId: string, discount: number) => void;
@@ -98,11 +101,13 @@ export const useCartStore = create<CartState>()(
       customer: null,
       lines: [],
       orderDiscount: 0,
+      couponCode: null,
       held: [],
 
       // A register belongs to a branch, so switching branch drops the till too.
       setBranch: (branchId) => set({ branchId, registerId: null }),
       setRegister: (registerId) => set({ registerId }),
+      setCouponCode: (couponCode) => set({ couponCode }),
 
       addLine: (line, quantity = 1) => {
         const state = get();
@@ -185,7 +190,7 @@ export const useCartStore = create<CartState>()(
         return { adjusted, removed };
       },
 
-      clear: () => set({ lines: [], orderDiscount: 0, customer: null }),
+      clear: () => set({ lines: [], orderDiscount: 0, customer: null, couponCode: null }),
 
       hold: (label) => {
         const { lines, customer, orderDiscount, held } = get();
@@ -217,10 +222,10 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: "pos-cart",
-      version: 3,
+      version: 4,
       // Rehydrated manually on mount so SSR and the first client render agree.
       skipHydration: true,
-      // v1 lines carried `stockQuantity` instead of `limit`; v2 had no register.
+      // v1 lines carried `stockQuantity`; v2 had no register; v3 no coupon.
       migrate: (persisted, version) => {
         if (version < 2) {
           return {
@@ -229,11 +234,16 @@ export const useCartStore = create<CartState>()(
             customer: null,
             lines: [],
             orderDiscount: 0,
+            couponCode: null,
             held: [],
           };
         }
         const state = persisted as Partial<CartState>;
-        return { ...(persisted as CartState), registerId: state.registerId ?? null };
+        return {
+          ...(persisted as CartState),
+          registerId: state.registerId ?? null,
+          couponCode: state.couponCode ?? null,
+        };
       },
     },
   ),
