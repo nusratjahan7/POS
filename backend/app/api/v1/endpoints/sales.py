@@ -26,6 +26,10 @@ from app.schemas.sale import (
     SaleReceipt,
     SaleStatus,
     SaleSummary,
+    SaleSyncError,
+    SaleSyncRequest,
+    SaleSyncResponse,
+    SaleSyncResult,
 )
 from app.schemas.sale_return import SaleReturnCreate, SaleReturnRead
 from app.services.branch_access import assert_branch_allowed, scoped_branch_ids
@@ -49,6 +53,42 @@ async def create_sale(
     assert_branch_allowed(scope, payload.branch_id)
     sale = await SaleService(session).create(payload, actor_id=actor.id)
     return SaleRead.model_validate(sale)
+
+
+@router.post(
+    "/sync",
+    response_model=SaleSyncResponse,
+    summary="Replay sales rung while offline (idempotent by offline_id)",
+    dependencies=[Depends(require_permissions(PermissionCode.SALES_CREATE))],
+)
+async def sync_sales(
+    session: SessionDep, actor: CurrentUser, scope: BranchScopeDep, payload: SaleSyncRequest
+) -> SaleSyncResponse:
+    """Sync queued offline sales. Each is priced and stock-checked server-side.
+
+    A sale whose ``offline_id`` was already synced is reported as ``duplicate``
+    and changes nothing, so a retry can never double-sell. Items are independent:
+    a rejected one moves no stock and does not roll back the rest.
+    """
+    for item in payload.sales:
+        assert_branch_allowed(scope, item.branch_id)
+
+    outcomes = await SaleService(session).sync(payload.sales, actor_id=actor.id)
+    return SaleSyncResponse(
+        results=[
+            SaleSyncResult(
+                offline_id=outcome.offline_id,
+                status=outcome.status,  # type: ignore[arg-type]
+                sale=SaleRead.model_validate(outcome.sale) if outcome.sale is not None else None,
+                error=(
+                    SaleSyncError(code=outcome.error_code, message=outcome.error_message or "")
+                    if outcome.error_code
+                    else None
+                ),
+            )
+            for outcome in outcomes
+        ]
+    )
 
 
 @router.get(

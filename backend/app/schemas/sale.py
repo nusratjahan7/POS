@@ -47,6 +47,9 @@ class SaleCreate(BaseModel):
     branch_id: uuid.UUID
     #: The till this sale is rung on. Its register session must be open.
     register_id: uuid.UUID
+    #: Idempotency key for a sale rung while offline. When set, replaying the same
+    #: key returns the existing sale rather than creating a second one.
+    offline_id: uuid.UUID | None = None
     customer_id: uuid.UUID | None = None
     note: str | None = Field(default=None, max_length=255)
     order_discount: Money = Decimal("0")
@@ -190,3 +193,31 @@ class SaleReceipt(BaseModel):
     #: The receipt's branch, enriched beyond `SaleRead.branch` with address/phone.
     branch: SaleBranch
     sale: SaleRead
+
+
+class SaleSyncRequest(BaseModel):
+    """A batch of sales rung offline, replayed on reconnect.
+
+    Each carries its own ``offline_id``; the server processes them one at a time
+    so a single rejected sale cannot roll back the rest of the batch.
+    """
+
+    sales: list[SaleCreate] = Field(min_length=1, max_length=50)
+
+
+class SaleSyncError(BaseModel):
+    code: str
+    message: str
+
+
+class SaleSyncResult(BaseModel):
+    offline_id: uuid.UUID | None
+    #: ``created`` (committed now), ``duplicate`` (already synced — idempotent
+    #: replay), or ``rejected`` (the server refused; nothing was written).
+    status: Literal["created", "duplicate", "rejected"]
+    sale: SaleRead | None = None
+    error: SaleSyncError | None = None
+
+
+class SaleSyncResponse(BaseModel):
+    results: list[SaleSyncResult]

@@ -16,15 +16,17 @@ from __future__ import annotations
 import secrets
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import ConflictError, NotFoundError, UnprocessableError
+from app.core.exceptions import AppError, ConflictError, NotFoundError, UnprocessableError
 from app.core.permissions import PermissionCode
 from app.models.customer import Customer
 from app.models.register import Register
@@ -49,6 +51,18 @@ from app.utils.money import ZERO, money
 from app.utils.pagination import PageParams
 
 HUNDRED = Decimal("100")
+
+
+@dataclass(slots=True)
+class SaleSyncOutcome:
+    """The result of replaying one queued offline sale."""
+
+    offline_id: uuid.UUID | None
+    #: ``created``, ``duplicate`` (already synced) or ``rejected``.
+    status: str
+    sale: Sale | None = None
+    error_code: str | None = None
+    error_message: str | None = None
 
 
 class SaleService:
@@ -218,7 +232,16 @@ class SaleService:
         All of it in one transaction, in the order the spec lays out. Nothing is
         committed until every step has succeeded, so a failure at any point leaves
         the database exactly as it was.
+
+        Idempotent for offline replay: when the payload carries an ``offline_id``
+        that already produced a sale, that sale is returned untouched so no stock
+        moves a second time.
         """
+        if payload.offline_id is not None:
+            existing = await self.sales.get_by_offline_id(payload.offline_id)
+            if existing is not None:
+                return existing
+
         branch = await self._resolve_branch(payload.branch_id)
         customer = await self._resolve_customer(payload.customer_id)
         business = await self.business.get_default()
@@ -294,6 +317,7 @@ class SaleService:
         sale = Sale(
             id=uuid.uuid4(),
             sale_number=await self._unique_number(),
+            offline_id=payload.offline_id,
             branch=branch,
             register_id=register.id,
             customer=customer,
@@ -391,8 +415,69 @@ class SaleService:
             )
 
             await self.session.commit()
+        except IntegrityError:
+            # The unique offline_id was claimed by a concurrent replay: return the
+            # sale that won instead of surfacing a constraint error.
+            await self.session.rollback()
+            if payload.offline_id is not None:
+                existing = await self.sales.get_by_offline_id(payload.offline_id)
+                if existing is not None:
+                    return existing
+            raise
         except Exception:
             await self.session.rollback()
             raise
 
         return await self._reload(sale.id)
+
+    # --- Offline sync ------------------------------------------------------
+    async def sync(
+        self, payloads: Sequence[SaleCreate], *, actor_id: uuid.UUID | None = None
+    ) -> list[SaleSyncOutcome]:
+        """Replay a batch of offline sales, one transaction per item.
+
+        Each item commits (or rejects) on its own, so one bad sale never rolls
+        back the rest. A replay of an ``offline_id`` that already produced a sale
+        is reported as ``duplicate`` and changes nothing — the guarantee against
+        duplicate sales. Every sale is priced and stock-checked by ``create``,
+        exactly as an online sale is.
+        """
+        outcomes: list[SaleSyncOutcome] = []
+        for payload in payloads:
+            duplicate = (
+                payload.offline_id is not None
+                and await self.sales.get_by_offline_id(payload.offline_id) is not None
+            )
+            try:
+                sale = await self.create(payload, actor_id=actor_id)
+            except AppError as exc:
+                await self.session.rollback()
+                outcomes.append(
+                    SaleSyncOutcome(
+                        offline_id=payload.offline_id,
+                        status="rejected",
+                        error_code=exc.code,
+                        error_message=exc.message,
+                    )
+                )
+                continue
+            except Exception:
+                # Never let one malformed item abort the whole batch.
+                await self.session.rollback()
+                outcomes.append(
+                    SaleSyncOutcome(
+                        offline_id=payload.offline_id,
+                        status="rejected",
+                        error_code="sync_failed",
+                        error_message="The sale could not be synced.",
+                    )
+                )
+                continue
+            outcomes.append(
+                SaleSyncOutcome(
+                    offline_id=payload.offline_id,
+                    status="duplicate" if duplicate else "created",
+                    sale=sale,
+                )
+            )
+        return outcomes

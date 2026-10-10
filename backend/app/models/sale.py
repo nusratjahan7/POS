@@ -69,6 +69,13 @@ class Sale(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     sale_number: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    #: The idempotency key a till assigns to a sale rung while offline. The unique
+    #: index makes replaying the same queued sale a no-op instead of a duplicate:
+    #: a second insert with the same key fails, and the service returns the
+    #: original. NULL for sales created online (many NULLs are allowed).
+    offline_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), unique=True, index=True, nullable=True
+    )
 
     branch_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

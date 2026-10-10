@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -15,8 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.repositories.branch import BranchRepository
+from app.repositories.business import BusinessRepository
 from app.repositories.category import CategoryRepository
+from app.repositories.payment_method import PaymentMethodRepository
 from app.repositories.product import ProductRepository
+from app.repositories.register import RegisterRepository
+from app.repositories.register_session import RegisterSessionRepository
 from app.repositories.stock_level import StockLevelRepository
 from app.utils.pagination import PageParams
 from app.utils.text import normalize_code

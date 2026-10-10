@@ -32,6 +32,11 @@ class SaleRepository(BaseRepository[Sale]):
         stmt = select(Sale.id).where(Sale.sale_number == number).limit(1)
         return (await self.session.execute(stmt)).scalar_one_or_none() is not None
 
+    async def get_by_offline_id(self, offline_id: uuid.UUID) -> Sale | None:
+        """The sale a queued offline transaction already produced, if any."""
+        stmt = select(Sale).where(Sale.offline_id == offline_id)
+        return (await self.session.execute(stmt)).scalars().unique().one_or_none()
+
     async def lock(self, sale_id: uuid.UUID) -> None:
         """Take a row lock on a sale so concurrent returns serialize.
 
