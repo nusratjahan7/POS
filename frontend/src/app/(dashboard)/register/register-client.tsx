@@ -33,6 +33,7 @@ import { branchesApi } from "@/lib/api/rbac";
 import { type Sale } from "@/lib/api/sales";
 import { businessApi, registersApi } from "@/lib/api/settings";
 import { computeTotals, useCartStore, type SyncResult } from "@/lib/pos/cart-store";
+import { findExactMatch } from "@/lib/pos/scan";
 import { usePosSettings } from "@/lib/pos/settings-store";
 import {
   configureSound,
@@ -328,19 +329,16 @@ export function RegisterClient() {
     const term = search.trim();
     if (!term) return;
 
-    const lowered = term.toLowerCase();
     // Barcode scanners type fast then Enter — match barcode/SKU exactly first.
-    const exact = products.find(
-      (product) =>
-        product.sku.toLowerCase() === lowered ||
-        (product.barcode !== null && product.barcode.toLowerCase() === lowered),
-    );
+    const exact = findExactMatch(products, term);
 
     if (exact) {
       if (tryAdd(exact)) {
         setSearch("");
         setQuery("");
       }
+      // Keep the field focused so the next scan lands without a click.
+      searchRef.current?.focus();
       return;
     }
 
@@ -370,6 +368,8 @@ export function RegisterClient() {
       toast.error("Could not look up that code.");
     } finally {
       pendingScans.current.delete(key);
+      // A keyboard-wedge scanner keeps working without the cashier re-clicking.
+      searchRef.current?.focus();
     }
   }
 

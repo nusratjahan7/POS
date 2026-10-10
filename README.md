@@ -120,6 +120,7 @@ npm run build
 | Discounts & Coupons   | ✅     |
 | Reporting & Analytics | ✅     |
 | Notifications & Audit Logging | ✅ |
+| Barcode & Printing    | ✅     |
 
 See `backend/README.md` and `frontend/README.md` for module-level detail.
 
@@ -145,4 +146,31 @@ never reach the table.
 
 - `GET /api/v1/audit-logs` — newest first, filterable by module/action/user/date.
 - Read at `/audit`. Guarded by `audit:read`.
+
+## Barcode & printing
+
+**Barcode generation** (`frontend/src/lib/barcode/`) supports EAN-13, UPC-A and
+Code 128B. The symbology is auto-detected from the value: a valid 13-digit number
+renders as EAN-13, a 12-digit number as UPC-A, anything else (internal SKUs, sale
+numbers) as Code 128. A value that cannot be encoded renders a small notice instead
+of breaking the page, and an EAN/UPC with a bad check digit falls back to Code 128.
+
+- **Scanning**: the register's search field is autofocused and treats a barcode
+  scanner as a keyboard (it types the code, then Enter). A scan matches exactly on
+  barcode or SKU, is added to the cart with a beep, and an unknown code warns and
+  keeps the field focused for the next scan. Misses fall back to the server.
+- **Search**: products and the POS catalog accept an exact `?barcode=` filter
+  (case-insensitive, never a substring match).
+
+**Printing** produces real text (never a screenshot) sent through a hidden iframe,
+so "Save as PDF" works and a pop-up blocker cannot stop it.
+
+- **Thermal receipt** (80 mm) and **A4 invoice** — from any sale, with a live
+  preview and layout tabs.
+- **Barcode labels** — from the Products list: a per-row action or the bulk
+  "Print labels" picker. Two physical layouts: a **50 × 25 mm thermal roll** (one
+  label per page) and **A4 sheets of 63.5 × 38.1 mm labels** (3 × 8, 24 per page).
+  Each label carries the product name, an optional price, and a scannable barcode
+  (the SKU when the product has none).
+
 

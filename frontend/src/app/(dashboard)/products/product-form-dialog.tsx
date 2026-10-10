@@ -3,12 +3,13 @@
 import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { FormSection } from "@/components/forms/form-section";
 import { ImageUpload } from "@/components/forms/image-upload";
+import { Barcode } from "@/components/barcode/barcode";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -118,6 +119,7 @@ export function ProductFormDialog({ product, onClose, onSaved }: ProductFormDial
     register,
     handleSubmit,
     setError,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -134,6 +136,8 @@ export function ProductFormDialog({ product, onClose, onSaved }: ProductFormDial
       opening_stock: "0",
     },
   });
+
+  const barcodeValue = useWatch({ control, name: "barcode" }) ?? "";
 
   async function onSubmit(values: FormValues) {
     setFormError(null);
@@ -240,20 +244,27 @@ export function ProductFormDialog({ product, onClose, onSaved }: ProductFormDial
                 />
               </Field>
 
-              <Field
-                label="Barcode"
-                htmlFor="product-barcode"
-                error={errors.barcode?.message}
-                hint="Optional. Scanned at the till."
-              >
-                <Input
-                  id="product-barcode"
-                  placeholder="8901234567890"
-                  autoComplete="off"
-                  className="font-mono"
-                  {...register("barcode")}
-                />
-              </Field>
+              <div className="flex flex-col gap-2">
+                <Field
+                  label="Barcode"
+                  htmlFor="product-barcode"
+                  error={errors.barcode?.message}
+                  hint="Optional. Scanned at the till. EAN-13 / UPC-A render automatically."
+                >
+                  <Input
+                    id="product-barcode"
+                    placeholder="8901234567890"
+                    autoComplete="off"
+                    className="font-mono"
+                    {...register("barcode")}
+                  />
+                </Field>
+                {barcodeValue.trim() ? (
+                  <div className="bg-background w-fit rounded-md border p-2.5">
+                    <Barcode value={barcodeValue.trim()} height={36} className="w-56" />
+                  </div>
+                ) : null}
+              </div>
 
               <Field label="Category" htmlFor="product-category">
                 <Select value={categoryId} onValueChange={setCategoryId}>

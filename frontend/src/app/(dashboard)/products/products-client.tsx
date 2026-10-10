@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImageIcon, Package, Pencil, Plus, ShieldAlert, Trash2 } from "lucide-react";
+import { ImageIcon, Package, Pencil, Plus, Printer, ShieldAlert, Tag, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { LabelPrintDialog } from "@/app/(dashboard)/products/label-print-dialog";
 import { ProductFormDialog } from "@/app/(dashboard)/products/product-form-dialog";
 import { Can, useCan } from "@/components/auth/can";
 import { DataTable, type DataTableColumn } from "@/components/data-table/data-table";
@@ -96,6 +97,8 @@ export function ProductsClient() {
 
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Product | null>(null);
+  // `null` = closed; `[]` = bulk picker; `[product]` = a single row's label.
+  const [labelTargets, setLabelTargets] = React.useState<Product[] | null>(null);
 
   const products = listQuery.data?.items ?? [];
   const currency = businessQuery.data?.currency ?? "USD";
@@ -239,6 +242,14 @@ export function ProductsClient() {
       align: "right",
       cell: (product) => (
         <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setLabelTargets([product])}
+            aria-label={`Print label for ${product.name}`}
+          >
+            <Tag className="size-4" />
+          </Button>
           <Can permission="catalog:write">
             <Button
               variant="ghost"
@@ -290,12 +301,18 @@ export function ProductsClient() {
         title="Products"
         description="Everything you sell. Prices are stored as exact decimals; stock status is derived from the quantity and its minimum."
         actions={
-          <Can permission="catalog:write">
-            <Button onClick={openCreate}>
-              <Plus className="size-4" />
-              New product
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={() => setLabelTargets([])}>
+              <Printer className="size-4" />
+              Print labels
             </Button>
-          </Can>
+            <Can permission="catalog:write">
+              <Button onClick={openCreate}>
+                <Plus className="size-4" />
+                New product
+              </Button>
+            </Can>
+          </div>
         }
       />
 
@@ -391,6 +408,15 @@ export function ProductsClient() {
           product={editing}
           onClose={() => setFormOpen(false)}
           onSaved={invalidate}
+        />
+      ) : null}
+
+      {labelTargets !== null ? (
+        <LabelPrintDialog
+          key={labelTargets.map((item) => item.id).join(",") || "bulk"}
+          preselected={labelTargets}
+          currency={currency}
+          onClose={() => setLabelTargets(null)}
         />
       ) : null}
 

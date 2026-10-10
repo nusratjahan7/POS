@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { code128Bars } from "./barcode";
+import { code128Bars, encodeCode128 } from "./code128";
 
 describe("code128Bars", () => {
   it("emits start, data, checksum and stop symbols", () => {
@@ -18,5 +18,14 @@ describe("code128Bars", () => {
 
   it("rejects characters outside the Code 128B range", () => {
     expect(() => code128Bars("é")).toThrow(/cannot encode/);
+  });
+});
+
+describe("encodeCode128", () => {
+  it("reports its format and human-readable text", () => {
+    const encoded = encodeCode128("INV-1");
+    expect(encoded.format).toBe("code128");
+    expect(encoded.text).toBe("INV-1");
+    expect(encoded.moduleCount).toBeGreaterThan(0);
   });
 });

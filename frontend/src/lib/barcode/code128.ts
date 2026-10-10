@@ -1,11 +1,16 @@
 /**
- * A minimal Code 128 (subset B) encoder.
+ * Code 128 (subset B) encoder.
  *
  * The receipt prints offline and its markup is serialized into a detached print
- * document, so an image or a network barcode service is not an option. This
- * emits bar geometry in module units, which the caller draws as inline SVG —
- * real vector output that stays crisp on thermal paper and in a PDF.
+ * document, so an image or a network barcode service is not an option. This emits
+ * bar geometry in module units, which the caller draws as inline SVG — real vector
+ * output that stays crisp on thermal paper and in a PDF.
+ *
+ * Code 128 encodes the full printable ASCII range, so it is the fallback for any
+ * value that is not a retail EAN/UPC number (internal SKUs, sale numbers).
  */
+
+import type { BarcodeBar, EncodedBarcode } from "@/lib/barcode/types";
 
 // The six element widths (bar, space, bar, space, bar, space) of each of the 107
 // Code 128 symbols, indexed by symbol value. Index 106 is the stop pattern, whose
@@ -26,9 +31,6 @@ const PATTERNS = [
 
 const START_B = 104;
 const STOP = 106;
-
-/** A bar's left edge and width, both measured in modules. */
-export type BarcodeBar = { x: number; width: number };
 
 /** Encode `value` as Code 128B and return its bars plus the total module count. */
 export function code128Bars(value: string): { bars: BarcodeBar[]; moduleCount: number } {
@@ -56,4 +58,10 @@ export function code128Bars(value: string): { bars: BarcodeBar[]; moduleCount: n
   }
 
   return { bars, moduleCount: x };
+}
+
+/** Code 128B as the common {@link EncodedBarcode} shape. */
+export function encodeCode128(value: string): EncodedBarcode {
+  const { bars, moduleCount } = code128Bars(value);
+  return { format: "code128", bars, moduleCount, text: value };
 }
