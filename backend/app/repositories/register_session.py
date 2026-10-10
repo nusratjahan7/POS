@@ -25,7 +25,7 @@ class RegisterSessionRepository(BaseRepository[RegisterSession]):
         self,
         *,
         register_id: uuid.UUID | None = None,
-        branch_id: uuid.UUID | None = None,
+        branch_ids: Sequence[uuid.UUID] | None = None,
         status: str | None = None,
         cashier_id: uuid.UUID | None = None,
         date_from: date | None = None,
@@ -34,8 +34,8 @@ class RegisterSessionRepository(BaseRepository[RegisterSession]):
         stmt = select(RegisterSession)
         if register_id is not None:
             stmt = stmt.where(RegisterSession.register_id == register_id)
-        if branch_id is not None:
-            stmt = stmt.where(RegisterSession.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(RegisterSession.branch_id.in_(branch_ids))
         if status is not None:
             stmt = stmt.where(RegisterSession.status == status)
         if cashier_id is not None:
@@ -82,9 +82,11 @@ class RegisterSessionRepository(BaseRepository[RegisterSession]):
         )
         return (await self.session.execute(stmt)).scalars().one_or_none()
 
-    async def list_open(self, *, branch_id: uuid.UUID | None = None) -> Sequence[RegisterSession]:
+    async def list_open(
+        self, *, branch_ids: Sequence[uuid.UUID] | None = None
+    ) -> Sequence[RegisterSession]:
         stmt = select(RegisterSession).where(RegisterSession.status == "open")
-        if branch_id is not None:
-            stmt = stmt.where(RegisterSession.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(RegisterSession.branch_id.in_(branch_ids))
         result = await self.session.execute(stmt.order_by(RegisterSession.opened_at.asc()))
         return result.scalars().all()

@@ -25,6 +25,24 @@ user_roles = Table(
     Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
 )
 
+user_branches = Table(
+    "user_branches",
+    Base.metadata,
+    Column(
+        "user_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "branch_id",
+        UUID(as_uuid=True),
+        ForeignKey("branches.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+)
+
 role_permissions = Table(
     "role_permissions",
     Base.metadata,

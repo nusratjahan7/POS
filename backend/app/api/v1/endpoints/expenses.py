@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, require_permissions
+from app.api.deps import BranchScopeDep, CurrentUser, Pagination, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
 from app.repositories.expense import ExpenseRepository
 from app.repositories.expense_category import ExpenseCategoryRepository
@@ -22,6 +22,7 @@ from app.schemas.expense import (
     ExpenseRead,
     ExpenseTotal,
 )
+from app.services.branch_access import assert_branch_allowed, scoped_branch_ids
 from app.services.expense import ExpenseService
 from app.services.expense_category import ExpenseCategoryService
 from app.utils.sorting import parse_sort
@@ -110,6 +111,7 @@ async def delete_expense_category(session: SessionDep, category_id: uuid.UUID) -
 )
 async def list_expenses(
     session: SessionDep,
+    scope: BranchScopeDep,
     params: Pagination,
     search: Annotated[
         str | None, Query(max_length=160, description="Description or reference")
@@ -125,7 +127,7 @@ async def list_expenses(
         params,
         sort=parse_sort(sort, ExpenseRepository.SORTABLE, default="-spent_at"),
         search=search,
-        branch_id=branch_id,
+        branch_ids=scoped_branch_ids(scope, branch_id),
         category_id=category_id,
         payment_method_id=payment_method_id,
         date_from=date_from,
@@ -147,6 +149,7 @@ async def list_expenses(
 )
 async def expenses_total(
     session: SessionDep,
+    scope: BranchScopeDep,
     search: Annotated[str | None, Query(max_length=160)] = None,
     branch_id: Annotated[uuid.UUID | None, Query()] = None,
     category_id: Annotated[uuid.UUID | None, Query()] = None,
@@ -156,7 +159,7 @@ async def expenses_total(
 ) -> ExpenseTotal:
     amount = await ExpenseService(session).total(
         search=search,
-        branch_id=branch_id,
+        branch_ids=scoped_branch_ids(scope, branch_id),
         category_id=category_id,
         payment_method_id=payment_method_id,
         date_from=date_from,
@@ -172,8 +175,9 @@ async def expenses_total(
     dependencies=[Depends(require_permissions(PermissionCode.EXPENSES_WRITE))],
 )
 async def create_expense(
-    session: SessionDep, actor: CurrentUser, payload: ExpenseCreate
+    session: SessionDep, actor: CurrentUser, scope: BranchScopeDep, payload: ExpenseCreate
 ) -> ExpenseRead:
+    assert_branch_allowed(scope, payload.branch_id)
     expense = await ExpenseService(session).create(payload, actor_id=actor.id)
     return ExpenseRead.model_validate(expense)
 
@@ -183,8 +187,12 @@ async def create_expense(
     response_model=ExpenseRead,
     dependencies=[Depends(require_permissions(PermissionCode.EXPENSES_READ))],
 )
-async def get_expense(session: SessionDep, expense_id: uuid.UUID) -> ExpenseRead:
-    return ExpenseRead.model_validate(await ExpenseService(session).get_or_404(expense_id))
+async def get_expense(
+    session: SessionDep, scope: BranchScopeDep, expense_id: uuid.UUID
+) -> ExpenseRead:
+    expense = await ExpenseService(session).get_or_404(expense_id)
+    assert_branch_allowed(scope, expense.branch_id)
+    return ExpenseRead.model_validate(expense)
 
 
 @router.delete(
@@ -192,5 +200,10 @@ async def get_expense(session: SessionDep, expense_id: uuid.UUID) -> ExpenseRead
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_permissions(PermissionCode.EXPENSES_WRITE))],
 )
-async def delete_expense(session: SessionDep, expense_id: uuid.UUID) -> None:
-    await ExpenseService(session).delete(expense_id)
+async def delete_expense(
+    session: SessionDep, scope: BranchScopeDep, expense_id: uuid.UUID
+) -> None:
+    service = ExpenseService(session)
+    expense = await service.get_or_404(expense_id)
+    assert_branch_allowed(scope, expense.branch_id)
+    await service.delete(expense_id)

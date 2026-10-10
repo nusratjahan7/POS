@@ -30,15 +30,17 @@ class DashboardRepository(BaseRepository[Sale]):
     model = Sale
 
     @staticmethod
-    def _sales_conditions(start: date, end: date, branch_id: uuid.UUID | None) -> list[Any]:
+    def _sales_conditions(
+        start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
+    ) -> list[Any]:
         lower, upper = _day_bounds(start, end)
         conditions: list[Any] = [
             Sale.status == "completed",
             Sale.sold_at >= lower,
             Sale.sold_at < upper,
         ]
-        if branch_id is not None:
-            conditions.append(Sale.branch_id == branch_id)
+        if branch_ids is not None:
+            conditions.append(Sale.branch_id.in_(branch_ids))
         return conditions
 
     # --- Standing counts ---------------------------------------------------
@@ -52,7 +54,7 @@ class DashboardRepository(BaseRepository[Sale]):
 
     # --- Trend components --------------------------------------------------
     async def daily_cost(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> Sequence[Row[Any]]:
         """Cost of goods sold per calendar day: captured cost x quantity."""
         day = func.date(Sale.sold_at).label("day")
@@ -60,14 +62,14 @@ class DashboardRepository(BaseRepository[Sale]):
             select(day, func.coalesce(func.sum(SaleItem.cost_price * SaleItem.quantity), 0))
             .select_from(SaleItem)
             .join(Sale, Sale.id == SaleItem.sale_id)
-            .where(*self._sales_conditions(start, end, branch_id))
+            .where(*self._sales_conditions(start, end, branch_ids))
             .group_by(day)
             .order_by(day)
         )
         return (await self.session.execute(stmt)).all()
 
     async def daily_expenses(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> Sequence[Row[Any]]:
         day = Expense.spent_at.label("day")
         stmt = (
@@ -76,12 +78,14 @@ class DashboardRepository(BaseRepository[Sale]):
             .group_by(day)
             .order_by(day)
         )
-        if branch_id is not None:
-            stmt = stmt.where(Expense.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(Expense.branch_id.in_(branch_ids))
         return (await self.session.execute(stmt)).all()
 
     # --- Recent activity ---------------------------------------------------
-    async def recent_sales(self, branch_id: uuid.UUID | None, limit: int) -> Sequence[Row[Any]]:
+    async def recent_sales(
+        self, branch_ids: Sequence[uuid.UUID] | None, limit: int
+    ) -> Sequence[Row[Any]]:
         stmt = (
             select(
                 Sale.id,
@@ -96,11 +100,13 @@ class DashboardRepository(BaseRepository[Sale]):
             .order_by(Sale.sold_at.desc())
             .limit(limit)
         )
-        if branch_id is not None:
-            stmt = stmt.where(Sale.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(Sale.branch_id.in_(branch_ids))
         return (await self.session.execute(stmt)).all()
 
-    async def recent_payments(self, branch_id: uuid.UUID | None, limit: int) -> Sequence[Row[Any]]:
+    async def recent_payments(
+        self, branch_ids: Sequence[uuid.UUID] | None, limit: int
+    ) -> Sequence[Row[Any]]:
         stmt = (
             select(
                 SalePayment.id,
@@ -115,8 +121,8 @@ class DashboardRepository(BaseRepository[Sale]):
             .order_by(SalePayment.paid_at.desc())
             .limit(limit)
         )
-        if branch_id is not None:
-            stmt = stmt.where(Sale.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(Sale.branch_id.in_(branch_ids))
         return (await self.session.execute(stmt)).all()
 
 

@@ -7,20 +7,15 @@ import { toast } from "sonner";
 
 import { RegisterFormDialog } from "@/app/(dashboard)/settings/register-form-dialog";
 import { SettingsCard } from "@/app/(dashboard)/settings/settings-card";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Can, useCan } from "@/components/auth/can";
+import { BranchFilter } from "@/components/branch/branch-filter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -33,18 +28,18 @@ import {
 import { describeError } from "@/lib/api/client";
 import { branchesApi } from "@/lib/api/rbac";
 import { businessApi, registersApi, type Register } from "@/lib/api/settings";
+import { ALL_BRANCHES, defaultBranchId } from "@/lib/auth/branches";
 import { formatMoney } from "@/lib/format";
-
-const ALL_BRANCHES = "all";
 
 export function RegistersSettings() {
   const canRead = useCan("registers:read");
   const canReadBusiness = useCan("business:read");
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const [search, setSearch] = React.useState("");
   const [query, setQuery] = React.useState("");
-  const [branchFilter, setBranchFilter] = React.useState(ALL_BRANCHES);
+  const [branchFilter, setBranchFilter] = React.useState(() => defaultBranchId(user));
 
   React.useEffect(() => {
     const timer = setTimeout(() => setQuery(search), 300);
@@ -143,19 +138,11 @@ export function RegistersSettings() {
             />
           </div>
 
-          <Select value={branchFilter} onValueChange={setBranchFilter}>
-            <SelectTrigger className="w-full sm:w-52" aria-label="Filter by branch">
-              <SelectValue placeholder="All branches" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_BRANCHES}>All branches</SelectItem>
-              {branches.map((branch) => (
-                <SelectItem key={branch.id} value={branch.id}>
-                  {branch.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <BranchFilter
+            value={branchFilter}
+            onValueChange={setBranchFilter}
+            className="w-full sm:w-52"
+          />
         </div>
 
         {noBranches ? (

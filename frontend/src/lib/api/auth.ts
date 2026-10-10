@@ -24,6 +24,10 @@ export type AuthUser = {
   last_login_at: string | null;
   branch_id: string | null;
   branch: BranchSummary | null;
+  /** Branches this account may read and act on (assignments). */
+  branches: BranchSummary[];
+  /** True when the account may access every branch (the `branches:all` grant). */
+  all_branches: boolean;
   roles: RoleSummary[];
   permissions: string[];
   created_at: string;

@@ -13,7 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, require_permissions
+from app.api.deps import BranchScopeDep, CurrentUser, Pagination, SessionDep, require_permissions
 from app.core.exceptions import NotFoundError
 from app.core.permissions import PermissionCode
 from app.repositories.sale import SaleRepository
@@ -28,6 +28,7 @@ from app.schemas.sale import (
     SaleSummary,
 )
 from app.schemas.sale_return import SaleReturnCreate, SaleReturnRead
+from app.services.branch_access import assert_branch_allowed, scoped_branch_ids
 from app.services.sale import SaleService
 from app.services.sale_return import SaleReturnService
 from app.utils.sorting import parse_sort
@@ -42,7 +43,10 @@ router = APIRouter(prefix="/sales", tags=["sales"])
     summary="Complete a sale (prices, stock and payments in one transaction)",
     dependencies=[Depends(require_permissions(PermissionCode.SALES_CREATE))],
 )
-async def create_sale(session: SessionDep, actor: CurrentUser, payload: SaleCreate) -> SaleRead:
+async def create_sale(
+    session: SessionDep, actor: CurrentUser, scope: BranchScopeDep, payload: SaleCreate
+) -> SaleRead:
+    assert_branch_allowed(scope, payload.branch_id)
     sale = await SaleService(session).create(payload, actor_id=actor.id)
     return SaleRead.model_validate(sale)
 
@@ -54,6 +58,7 @@ async def create_sale(session: SessionDep, actor: CurrentUser, payload: SaleCrea
 )
 async def list_sales(
     session: SessionDep,
+    scope: BranchScopeDep,
     params: Pagination,
     search: Annotated[str | None, Query(max_length=32, description="Invoice number")] = None,
     branch_id: Annotated[uuid.UUID | None, Query()] = None,
@@ -71,7 +76,7 @@ async def list_sales(
         params,
         sort=parse_sort(sort, SaleRepository.SORTABLE, default="-sold_at"),
         search=search,
-        branch_id=branch_id,
+        branch_ids=scoped_branch_ids(scope, branch_id),
         customer_id=customer_id,
         cashier_id=cashier_id,
         status=sale_status,
@@ -103,8 +108,10 @@ async def list_sale_cashiers(session: SessionDep) -> list[SaleCashierOption]:
     response_model=SaleRead,
     dependencies=[Depends(require_permissions(PermissionCode.SALES_READ))],
 )
-async def get_sale(session: SessionDep, sale_id: uuid.UUID) -> SaleRead:
-    return SaleRead.model_validate(await SaleService(session).get_or_404(sale_id))
+async def get_sale(session: SessionDep, scope: BranchScopeDep, sale_id: uuid.UUID) -> SaleRead:
+    sale = await SaleService(session).get_or_404(sale_id)
+    assert_branch_allowed(scope, sale.branch_id)
+    return SaleRead.model_validate(sale)
 
 
 @router.post(
@@ -117,9 +124,12 @@ async def get_sale(session: SessionDep, sale_id: uuid.UUID) -> SaleRead:
 async def create_sale_return(
     session: SessionDep,
     actor: CurrentUser,
+    scope: BranchScopeDep,
     sale_id: uuid.UUID,
     payload: SaleReturnCreate,
 ) -> SaleReturnRead:
+    sale = await SaleService(session).get_or_404(sale_id)
+    assert_branch_allowed(scope, sale.branch_id)
     record = await SaleReturnService(session).create(sale_id, payload, actor_id=actor.id)
     return SaleReturnRead.model_validate(record)
 
@@ -130,7 +140,11 @@ async def create_sale_return(
     summary="A sale's return history",
     dependencies=[Depends(require_permissions(PermissionCode.SALES_READ))],
 )
-async def list_sale_returns(session: SessionDep, sale_id: uuid.UUID) -> list[SaleReturnRead]:
+async def list_sale_returns(
+    session: SessionDep, scope: BranchScopeDep, sale_id: uuid.UUID
+) -> list[SaleReturnRead]:
+    sale = await SaleService(session).get_or_404(sale_id)
+    assert_branch_allowed(scope, sale.branch_id)
     records = await SaleReturnService(session).list_for_sale(sale_id)
     return [SaleReturnRead.model_validate(record) for record in records]
 
@@ -144,9 +158,12 @@ async def list_sale_returns(session: SessionDep, sale_id: uuid.UUID) -> list[Sal
 async def cancel_sale_return(
     session: SessionDep,
     actor: CurrentUser,
+    scope: BranchScopeDep,
     sale_id: uuid.UUID,
     return_id: uuid.UUID,
 ) -> SaleReturnRead:
+    sale = await SaleService(session).get_or_404(sale_id)
+    assert_branch_allowed(scope, sale.branch_id)
     service = SaleReturnService(session)
     record = await service.get_or_404(return_id)
     if record.sale_id != sale_id:
@@ -161,5 +178,10 @@ async def cancel_sale_return(
     summary="A sale plus the business details a printed receipt needs",
     dependencies=[Depends(require_permissions(PermissionCode.SALES_READ))],
 )
-async def get_sale_receipt(session: SessionDep, sale_id: uuid.UUID) -> SaleReceipt:
-    return SaleReceipt.model_validate(await SaleService(session).receipt(sale_id))
+async def get_sale_receipt(
+    session: SessionDep, scope: BranchScopeDep, sale_id: uuid.UUID
+) -> SaleReceipt:
+    service = SaleService(session)
+    sale = await service.get_or_404(sale_id)
+    assert_branch_allowed(scope, sale.branch_id)
+    return SaleReceipt.model_validate(await service.receipt(sale_id))

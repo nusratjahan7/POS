@@ -4,7 +4,7 @@ Alembic autogenerate and ``Base.metadata.create_all`` rely on this side effect,
 so keep every model imported here.
 """
 
-from app.models.associations import role_permissions, user_roles
+from app.models.associations import role_permissions, user_branches, user_roles
 from app.models.audit_log import AuditLog
 from app.models.branch import Branch
 from app.models.brand import Brand
@@ -82,5 +82,6 @@ __all__ = [
     "SupplierPayment",
     "User",
     "role_permissions",
+    "user_branches",
     "user_roles",
 ]

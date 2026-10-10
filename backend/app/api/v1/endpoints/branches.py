@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import Pagination, SessionDep, require_permissions
+from app.api.deps import BranchScopeDep, Pagination, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
 from app.repositories.branch import BranchRepository
 from app.schemas.branch import BranchCreate, BranchRead, BranchSummary, BranchUpdate
@@ -49,8 +49,10 @@ async def list_branches(
     response_model=list[BranchSummary],
     dependencies=[Depends(require_permissions(PermissionCode.BRANCHES_READ))],
 )
-async def branch_options(session: SessionDep) -> list[BranchSummary]:
-    branches = await BranchService(session).list_all()
+async def branch_options(
+    session: SessionDep, scope: BranchScopeDep
+) -> list[BranchSummary]:
+    branches = await BranchService(session).list_for_scope(scope)
     return [BranchSummary.model_validate(branch) for branch in branches]
 
 

@@ -68,11 +68,16 @@ class NotificationService:
         code: str,
         *,
         exclude_user_id: uuid.UUID | None = None,
+        branch_id: uuid.UUID | None = None,
         **payload: Any,
     ) -> list[Notification]:
-        """Notify every user who holds *code*, minus the actor. Does not commit."""
+        """Notify every user who holds *code*, minus the actor. Does not commit.
+
+        When *branch_id* is set, only users responsible for that branch are
+        notified (see ``recipients_with_permission``).
+        """
         recipients = await self.notifications.recipients_with_permission(
-            code, exclude_user_id=exclude_user_id
+            code, exclude_user_id=exclude_user_id, branch_id=branch_id
         )
         return await self.push(recipients=recipients, **payload)
 

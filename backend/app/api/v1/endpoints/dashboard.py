@@ -12,9 +12,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import SessionDep, require_permissions
+from app.api.deps import BranchScopeDep, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
 from app.schemas.dashboard import DashboardSnapshot
+from app.services.branch_access import scoped_branch_ids
 from app.services.dashboard import DashboardService
 from app.utils.daterange import RangePreset, WindowRequest
 
@@ -47,6 +48,11 @@ BranchFilter = Annotated[uuid.UUID | None, Query(description="Restrict to one br
     dependencies=[Depends(require_permissions(PermissionCode.DASHBOARD_VIEW))],
 )
 async def dashboard_snapshot(
-    session: SessionDep, window: DashboardWindowDep, branch_id: BranchFilter = None
+    session: SessionDep,
+    scope: BranchScopeDep,
+    window: DashboardWindowDep,
+    branch_id: BranchFilter = None,
 ) -> DashboardSnapshot:
-    return await DashboardService(session).snapshot(window, branch_id=branch_id)
+    return await DashboardService(session).snapshot(
+        window, branch_ids=scoped_branch_ids(scope, branch_id)
+    )

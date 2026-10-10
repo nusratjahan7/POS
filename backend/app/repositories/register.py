@@ -41,15 +41,15 @@ class RegisterRepository(BaseRepository[Register]):
         self,
         *,
         search: str | None = None,
-        branch_id: uuid.UUID | None = None,
+        branch_ids: Sequence[uuid.UUID] | None = None,
         is_active: bool | None = None,
     ) -> Select[Any]:
         stmt = select(Register).where(Register.deleted_at.is_(None))
         if search:
             pattern = like_pattern(search)
             stmt = stmt.where(Register.name.ilike(pattern, escape="\\"))
-        if branch_id is not None:
-            stmt = stmt.where(Register.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(Register.branch_id.in_(branch_ids))
         if is_active is not None:
             stmt = stmt.where(Register.is_active.is_(is_active))
         return stmt
@@ -69,10 +69,12 @@ class RegisterRepository(BaseRepository[Register]):
             stmt = stmt.order_by(Register.name.asc())
         return await self.paginate(stmt, params)
 
-    async def list_all(self, *, branch_id: uuid.UUID | None = None) -> Sequence[Register]:
+    async def list_all(
+        self, *, branch_ids: Sequence[uuid.UUID] | None = None
+    ) -> Sequence[Register]:
         stmt = select(Register).where(Register.deleted_at.is_(None))
-        if branch_id is not None:
-            stmt = stmt.where(Register.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(Register.branch_id.in_(branch_ids))
         return (await self.session.execute(stmt.order_by(Register.name.asc()))).scalars().all()
 
     async def count_in_branch(self, branch_id: uuid.UUID) -> int:

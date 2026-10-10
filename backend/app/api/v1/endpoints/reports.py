@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response
 
-from app.api.deps import SessionDep, require_permissions
+from app.api.deps import BranchScopeDep, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
 from app.schemas.report import (
     FinancialReport,
@@ -21,6 +21,7 @@ from app.schemas.report import (
     PurchaseReport,
     SalesReport,
 )
+from app.services.branch_access import scoped_branch_ids
 from app.services.report import ReportService
 from app.services.report_export import (
     CSV_MEDIA_TYPE,
@@ -70,9 +71,14 @@ BranchFilter = Annotated[uuid.UUID | None, Query(description="Restrict to one br
     dependencies=[Depends(require_permissions(PermissionCode.REPORTS_VIEW))],
 )
 async def sales_report(
-    session: SessionDep, window: ReportWindowDep, branch_id: BranchFilter = None
+    session: SessionDep,
+    scope: BranchScopeDep,
+    window: ReportWindowDep,
+    branch_id: BranchFilter = None,
 ) -> SalesReport:
-    return await ReportService(session).sales(window, branch_id=branch_id)
+    return await ReportService(session).sales(
+        window, branch_ids=scoped_branch_ids(scope, branch_id)
+    )
 
 
 @router.get(
@@ -81,9 +87,14 @@ async def sales_report(
     dependencies=[Depends(require_permissions(PermissionCode.REPORTS_VIEW))],
 )
 async def purchases_report(
-    session: SessionDep, window: ReportWindowDep, branch_id: BranchFilter = None
+    session: SessionDep,
+    scope: BranchScopeDep,
+    window: ReportWindowDep,
+    branch_id: BranchFilter = None,
 ) -> PurchaseReport:
-    return await ReportService(session).purchases(window, branch_id=branch_id)
+    return await ReportService(session).purchases(
+        window, branch_ids=scoped_branch_ids(scope, branch_id)
+    )
 
 
 @router.get(
@@ -92,9 +103,14 @@ async def purchases_report(
     dependencies=[Depends(require_permissions(PermissionCode.REPORTS_VIEW))],
 )
 async def inventory_report(
-    session: SessionDep, window: ReportWindowDep, branch_id: BranchFilter = None
+    session: SessionDep,
+    scope: BranchScopeDep,
+    window: ReportWindowDep,
+    branch_id: BranchFilter = None,
 ) -> InventoryReport:
-    return await ReportService(session).inventory(window, branch_id=branch_id)
+    return await ReportService(session).inventory(
+        window, branch_ids=scoped_branch_ids(scope, branch_id)
+    )
 
 
 @router.get(
@@ -103,9 +119,14 @@ async def inventory_report(
     dependencies=[Depends(require_permissions(PermissionCode.REPORTS_VIEW))],
 )
 async def financial_report(
-    session: SessionDep, window: ReportWindowDep, branch_id: BranchFilter = None
+    session: SessionDep,
+    scope: BranchScopeDep,
+    window: ReportWindowDep,
+    branch_id: BranchFilter = None,
 ) -> FinancialReport:
-    return await ReportService(session).financial(window, branch_id=branch_id)
+    return await ReportService(session).financial(
+        window, branch_ids=scoped_branch_ids(scope, branch_id)
+    )
 
 
 @router.get(
@@ -114,6 +135,7 @@ async def financial_report(
 )
 async def export_report(
     session: SessionDep,
+    scope: BranchScopeDep,
     report: ReportName,
     window: ReportWindowDep,
     export_format: Annotated[ExportFormat, Query(alias="format")] = "csv",
@@ -121,7 +143,7 @@ async def export_report(
 ) -> Response:
     """Download a report as CSV, a real Excel workbook (.xlsx), or printable HTML."""
     sections, covered = await ReportService(session).export(
-        report, window, branch_id=branch_id
+        report, window, branch_ids=scoped_branch_ids(scope, branch_id)
     )
     if export_format == "csv":
         content = sections_to_csv(sections)

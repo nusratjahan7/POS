@@ -15,6 +15,7 @@ from app.repositories.branch import BranchRepository
 from app.repositories.register import RegisterRepository
 from app.schemas.branch import BranchCreate, BranchUpdate
 from app.services.audit_log import AuditLogService
+from app.services.branch_access import BranchScope
 from app.services.business import BusinessService
 from app.utils.pagination import PageParams
 from app.utils.text import normalize_code
@@ -58,6 +59,12 @@ class BranchService:
 
     async def list_all(self) -> Sequence[Branch]:
         return await self.branches.list_all()
+
+    async def list_for_scope(self, scope: BranchScope) -> Sequence[Branch]:
+        """The branches a user may pick from: all for an admin, else the allowed set."""
+        if scope.all_branches:
+            return await self.branches.list_all()
+        return await self.branches.list_by_ids(scope.allowed)
 
     async def _resolve_business_id(self, business_id: uuid.UUID | None) -> uuid.UUID:
         """Every branch belongs to the business. Default to it when unspecified."""

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.permissions import ADMINISTRATOR_ROLE_NAME
 from app.db.base import Base
 from app.db.mixins import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
-from app.models.associations import user_roles
+from app.models.associations import user_branches, user_roles
 
 if TYPE_CHECKING:
     from app.models.branch import Branch
@@ -50,6 +50,13 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     )
 
     branch: Mapped[Branch | None] = relationship(back_populates="users", lazy="joined")
+    # Branches this account may operate in. ``branch_id`` above stays the primary
+    # / default branch; this is the many-to-many grant that branch authorization
+    # reads. Empty means "fall back to the primary branch".
+    branches: Mapped[list[Branch]] = relationship(
+        secondary=user_branches,
+        lazy="selectin",
+    )
     roles: Mapped[list[Role]] = relationship(
         secondary=user_roles,
         back_populates="users",

@@ -27,7 +27,7 @@ class StockMovementRepository(BaseRepository[StockMovement]):
         *,
         search: str | None = None,
         product_id: uuid.UUID | None = None,
-        branch_id: uuid.UUID | None = None,
+        branch_ids: Sequence[uuid.UUID] | None = None,
         movement_type: str | None = None,
         reference_type: str | None = None,
     ) -> Select[Any]:
@@ -49,8 +49,8 @@ class StockMovementRepository(BaseRepository[StockMovement]):
             )
         if product_id is not None:
             stmt = stmt.where(StockMovement.product_id == product_id)
-        if branch_id is not None:
-            stmt = stmt.where(StockMovement.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(StockMovement.branch_id.in_(branch_ids))
         if movement_type is not None:
             stmt = stmt.where(StockMovement.movement_type == movement_type)
         if reference_type is not None:

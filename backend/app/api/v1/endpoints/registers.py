@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import Pagination, SessionDep, require_permissions
+from app.api.deps import BranchScopeDep, Pagination, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
 from app.repositories.register import RegisterRepository
 from app.schemas.common import Page
@@ -21,6 +21,7 @@ from app.schemas.register import (
     RegisterSummary,
     RegisterUpdate,
 )
+from app.services.branch_access import assert_branch_allowed, scoped_branch_ids
 from app.services.register import RegisterService
 from app.utils.sorting import parse_sort
 
@@ -34,6 +35,7 @@ router = APIRouter(prefix="/registers", tags=["registers"])
 )
 async def list_registers(
     session: SessionDep,
+    scope: BranchScopeDep,
     params: Pagination,
     search: Annotated[str | None, Query(max_length=120)] = None,
     branch_id: Annotated[uuid.UUID | None, Query()] = None,
@@ -44,7 +46,7 @@ async def list_registers(
         params,
         sort=parse_sort(sort, RegisterRepository.SORTABLE, default="name"),
         search=search,
-        branch_id=branch_id,
+        branch_ids=scoped_branch_ids(scope, branch_id),
         is_active=is_active,
     )
     return Page.build(
@@ -62,9 +64,12 @@ async def list_registers(
 )
 async def register_options(
     session: SessionDep,
+    scope: BranchScopeDep,
     branch_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> list[RegisterSummary]:
-    registers = await RegisterService(session).list_all(branch_id=branch_id)
+    registers = await RegisterService(session).list_all(
+        branch_ids=scoped_branch_ids(scope, branch_id)
+    )
     return [RegisterSummary.model_validate(register) for register in registers]
 
 
@@ -74,7 +79,10 @@ async def register_options(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_permissions(PermissionCode.REGISTERS_WRITE))],
 )
-async def create_register(session: SessionDep, payload: RegisterCreate) -> RegisterRead:
+async def create_register(
+    session: SessionDep, scope: BranchScopeDep, payload: RegisterCreate
+) -> RegisterRead:
+    assert_branch_allowed(scope, payload.branch_id)
     return RegisterRead.model_validate(await RegisterService(session).create(payload))
 
 
@@ -83,8 +91,12 @@ async def create_register(session: SessionDep, payload: RegisterCreate) -> Regis
     response_model=RegisterRead,
     dependencies=[Depends(require_permissions(PermissionCode.REGISTERS_READ))],
 )
-async def get_register(session: SessionDep, register_id: uuid.UUID) -> RegisterRead:
-    return RegisterRead.model_validate(await RegisterService(session).get_or_404(register_id))
+async def get_register(
+    session: SessionDep, scope: BranchScopeDep, register_id: uuid.UUID
+) -> RegisterRead:
+    register = await RegisterService(session).get_or_404(register_id)
+    assert_branch_allowed(scope, register.branch_id)
+    return RegisterRead.model_validate(register)
 
 
 @router.patch(
@@ -93,9 +105,17 @@ async def get_register(session: SessionDep, register_id: uuid.UUID) -> RegisterR
     dependencies=[Depends(require_permissions(PermissionCode.REGISTERS_WRITE))],
 )
 async def update_register(
-    session: SessionDep, register_id: uuid.UUID, payload: RegisterUpdate
+    session: SessionDep,
+    scope: BranchScopeDep,
+    register_id: uuid.UUID,
+    payload: RegisterUpdate,
 ) -> RegisterRead:
-    return RegisterRead.model_validate(await RegisterService(session).update(register_id, payload))
+    service = RegisterService(session)
+    existing = await service.get_or_404(register_id)
+    assert_branch_allowed(scope, existing.branch_id)
+    if payload.branch_id is not None:
+        assert_branch_allowed(scope, payload.branch_id)
+    return RegisterRead.model_validate(await service.update(register_id, payload))
 
 
 @router.delete(
@@ -103,5 +123,10 @@ async def update_register(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_permissions(PermissionCode.REGISTERS_WRITE))],
 )
-async def delete_register(session: SessionDep, register_id: uuid.UUID) -> None:
-    await RegisterService(session).delete(register_id)
+async def delete_register(
+    session: SessionDep, scope: BranchScopeDep, register_id: uuid.UUID
+) -> None:
+    service = RegisterService(session)
+    register = await service.get_or_404(register_id)
+    assert_branch_allowed(scope, register.branch_id)
+    await service.delete(register_id)

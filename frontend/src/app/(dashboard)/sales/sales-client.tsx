@@ -6,7 +6,9 @@ import { Eye, Printer, Receipt, ShieldAlert } from "lucide-react";
 
 import { SaleDetailsDialog } from "@/app/(dashboard)/sales/sale-details-dialog";
 import { SalesDateRange, type PickedDateRange } from "@/app/(dashboard)/sales/sales-date-range";
+import { useAuth } from "@/components/auth/auth-provider";
 import { useCan } from "@/components/auth/can";
+import { BranchFilter } from "@/components/branch/branch-filter";
 import { DataTable, type DataTableColumn } from "@/components/data-table/data-table";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
 import { DataTableSearch } from "@/components/data-table/data-table-search";
@@ -26,6 +28,7 @@ import {
   type SaleStatus,
   type SaleSummary,
 } from "@/lib/api/sales";
+import { ALL_BRANCHES, defaultBranchId } from "@/lib/auth/branches";
 import { formatAmount, formatDateTime } from "@/lib/format";
 
 const ALL = "all";
@@ -54,8 +57,10 @@ const SORT_OPTIONS = [
 
 export function SalesClient() {
   const canRead = useCan("sales:read");
+  const { user } = useAuth();
 
   const table = useDataTable();
+  const [branch, setBranch] = React.useState(() => defaultBranchId(user));
   const [customer, setCustomer] = React.useState(ALL);
   const [cashier, setCashier] = React.useState(ALL);
   const [payment, setPayment] = React.useState(ALL);
@@ -75,6 +80,7 @@ export function SalesClient() {
       {
         query: table.query,
         page: table.page,
+        branch,
         customer,
         cashier,
         payment,
@@ -88,6 +94,7 @@ export function SalesClient() {
       salesApi.list({
         search: table.query || undefined,
         page: table.page,
+        branch_id: branch === ALL_BRANCHES ? undefined : branch,
         customer_id: customer === ALL ? undefined : customer,
         cashier_id: cashier === ALL ? undefined : cashier,
         payment_status: payment === ALL ? undefined : (payment as PaymentStatus),
@@ -303,6 +310,14 @@ export function SalesClient() {
               placeholder="Search invoice number"
               ariaLabel="Search sales by invoice number"
               className="col-span-2"
+            />
+            <BranchFilter
+              value={branch}
+              onValueChange={(value) => {
+                setBranch(value);
+                table.resetPage();
+              }}
+              className="sm:w-48"
             />
             <SelectFilter
               value={customer}

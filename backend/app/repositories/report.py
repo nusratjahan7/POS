@@ -55,7 +55,7 @@ class ReportRepository(BaseRepository[Sale]):
     # --- Shared filters ----------------------------------------------------
     @staticmethod
     def _sales_conditions(
-        start: date, end: date, branch_id: uuid.UUID | None
+        start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> list[Any]:
         lower, upper = _day_bounds(start, end)
         conditions: list[Any] = [
@@ -63,26 +63,26 @@ class ReportRepository(BaseRepository[Sale]):
             Sale.sold_at >= lower,
             Sale.sold_at < upper,
         ]
-        if branch_id is not None:
-            conditions.append(Sale.branch_id == branch_id)
+        if branch_ids is not None:
+            conditions.append(Sale.branch_id.in_(branch_ids))
         return conditions
 
     @staticmethod
     def _movement_conditions(
-        start: date, end: date, branch_id: uuid.UUID | None
+        start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> list[Any]:
         lower, upper = _day_bounds(start, end)
         conditions: list[Any] = [
             StockMovement.created_at >= lower,
             StockMovement.created_at < upper,
         ]
-        if branch_id is not None:
-            conditions.append(StockMovement.branch_id == branch_id)
+        if branch_ids is not None:
+            conditions.append(StockMovement.branch_id.in_(branch_ids))
         return conditions
 
     # --- Sales -------------------------------------------------------------
     async def sales_totals(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> dict[str, Decimal | int]:
         stmt = select(
             func.count(Sale.id),
@@ -91,7 +91,7 @@ class ReportRepository(BaseRepository[Sale]):
             func.coalesce(func.sum(Sale.returned_amount), 0),
             func.coalesce(func.sum(Sale.discount), 0),
             func.coalesce(func.sum(Sale.tax), 0),
-        ).where(*self._sales_conditions(start, end, branch_id))
+        ).where(*self._sales_conditions(start, end, branch_ids))
         row = (await self.session.execute(stmt)).one()
         return {
             "order_count": int(row[0]),
@@ -103,40 +103,45 @@ class ReportRepository(BaseRepository[Sale]):
         }
 
     async def sales_items_sold(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> Decimal:
         stmt = (
             select(func.coalesce(func.sum(SaleItem.quantity), 0))
             .select_from(SaleItem)
             .join(Sale, Sale.id == SaleItem.sale_id)
-            .where(*self._sales_conditions(start, end, branch_id))
+            .where(*self._sales_conditions(start, end, branch_ids))
         )
         return Decimal((await self.session.execute(stmt)).scalar_one())
 
-    async def sales_cost(self, start: date, end: date, branch_id: uuid.UUID | None) -> Decimal:
+    async def sales_cost(
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
+    ) -> Decimal:
         """Cost of goods sold: captured cost x quantity, over the window."""
         stmt = (
             select(func.coalesce(func.sum(SaleItem.cost_price * SaleItem.quantity), 0))
             .select_from(SaleItem)
             .join(Sale, Sale.id == SaleItem.sale_id)
-            .where(*self._sales_conditions(start, end, branch_id))
+            .where(*self._sales_conditions(start, end, branch_ids))
         )
         return Decimal((await self.session.execute(stmt)).scalar_one())
 
     async def returns_count(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> int:
         """Completed returns against sales in the window (same population as refunds)."""
         stmt = (
             select(func.count(SaleReturn.id))
             .select_from(SaleReturn)
             .join(Sale, Sale.id == SaleReturn.sale_id)
-            .where(*self._sales_conditions(start, end, branch_id), SaleReturn.status == "completed")
+            .where(
+                *self._sales_conditions(start, end, branch_ids),
+                SaleReturn.status == "completed",
+            )
         )
         return int((await self.session.execute(stmt)).scalar_one())
 
     async def sales_daily(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> Sequence[Row[Any]]:
         day = func.date(Sale.sold_at).label("day")
         stmt = (
@@ -145,14 +150,14 @@ class ReportRepository(BaseRepository[Sale]):
                 func.count(Sale.id),
                 func.coalesce(func.sum(Sale.total - Sale.returned_amount), 0),
             )
-            .where(*self._sales_conditions(start, end, branch_id))
+            .where(*self._sales_conditions(start, end, branch_ids))
             .group_by(day)
             .order_by(day)
         )
         return (await self.session.execute(stmt)).all()
 
     async def sales_by_product(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> Sequence[Row[Any]]:
         stmt = (
             select(
@@ -165,14 +170,14 @@ class ReportRepository(BaseRepository[Sale]):
             )
             .select_from(SaleItem)
             .join(Sale, Sale.id == SaleItem.sale_id)
-            .where(*self._sales_conditions(start, end, branch_id))
+            .where(*self._sales_conditions(start, end, branch_ids))
             .group_by(SaleItem.product_id)
             .order_by(func.sum(SaleItem.line_total).desc())
         )
         return (await self.session.execute(stmt)).all()
 
     async def sales_by_category(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> Sequence[Row[Any]]:
         stmt = (
             select(
@@ -185,40 +190,42 @@ class ReportRepository(BaseRepository[Sale]):
             .join(Sale, Sale.id == SaleItem.sale_id)
             .join(Product, Product.id == SaleItem.product_id)
             .outerjoin(Category, Category.id == Product.category_id)
-            .where(*self._sales_conditions(start, end, branch_id))
+            .where(*self._sales_conditions(start, end, branch_ids))
             .group_by(Product.category_id, Category.name)
             .order_by(func.sum(SaleItem.line_total).desc())
         )
         return (await self.session.execute(stmt)).all()
 
     async def sales_by_cashier(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> Sequence[Row[Any]]:
         net = func.coalesce(func.sum(Sale.total - Sale.returned_amount), 0)
         stmt = (
             select(Sale.cashier_id, User.full_name, func.count(Sale.id), net)
             .select_from(Sale)
             .outerjoin(User, User.id == Sale.cashier_id)
-            .where(*self._sales_conditions(start, end, branch_id))
+            .where(*self._sales_conditions(start, end, branch_ids))
             .group_by(Sale.cashier_id, User.full_name)
             .order_by(net.desc())
         )
         return (await self.session.execute(stmt)).all()
 
-    async def sales_by_branch(self, start: date, end: date) -> Sequence[Row[Any]]:
+    async def sales_by_branch(
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
+    ) -> Sequence[Row[Any]]:
         net = func.coalesce(func.sum(Sale.total - Sale.returned_amount), 0)
         stmt = (
             select(Sale.branch_id, Branch.name, func.count(Sale.id), net)
             .select_from(Sale)
             .join(Branch, Branch.id == Sale.branch_id)
-            .where(*self._sales_conditions(start, end, None))
+            .where(*self._sales_conditions(start, end, branch_ids))
             .group_by(Sale.branch_id, Branch.name)
             .order_by(net.desc())
         )
         return (await self.session.execute(stmt)).all()
 
     async def sales_by_payment_method(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> Sequence[Row[Any]]:
         stmt = (
             select(
@@ -231,7 +238,7 @@ class ReportRepository(BaseRepository[Sale]):
             .select_from(SalePayment)
             .join(Sale, Sale.id == SalePayment.sale_id)
             .outerjoin(PaymentMethod, PaymentMethod.id == SalePayment.payment_method_id)
-            .where(*self._sales_conditions(start, end, branch_id))
+            .where(*self._sales_conditions(start, end, branch_ids))
             .group_by(SalePayment.payment_method_id, PaymentMethod.name, PaymentMethod.kind)
             .order_by(func.sum(SalePayment.amount).desc())
         )
@@ -240,26 +247,26 @@ class ReportRepository(BaseRepository[Sale]):
     # --- Purchases ---------------------------------------------------------
     @staticmethod
     def _purchase_conditions(
-        start: date | None, end: date | None, branch_id: uuid.UUID | None
+        start: date | None, end: date | None, branch_ids: Sequence[uuid.UUID] | None
     ) -> list[Any]:
         conditions: list[Any] = [Purchase.status == "received"]
         if start is not None:
             conditions.append(Purchase.purchase_date >= start)
         if end is not None:
             conditions.append(Purchase.purchase_date <= end)
-        if branch_id is not None:
-            conditions.append(Purchase.branch_id == branch_id)
+        if branch_ids is not None:
+            conditions.append(Purchase.branch_id.in_(branch_ids))
         return conditions
 
     async def purchases_totals(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> dict[str, Decimal | int]:
         stmt = select(
             func.count(Purchase.id),
             func.coalesce(func.sum(Purchase.total), 0),
             func.coalesce(func.sum(Purchase.paid), 0),
             func.coalesce(func.sum(Purchase.due), 0),
-        ).where(*self._purchase_conditions(start, end, branch_id))
+        ).where(*self._purchase_conditions(start, end, branch_ids))
         row = (await self.session.execute(stmt)).one()
         return {
             "purchase_count": int(row[0]),
@@ -268,15 +275,15 @@ class ReportRepository(BaseRepository[Sale]):
             "period_due": Decimal(row[3]),
         }
 
-    async def outstanding_purchase_due(self, branch_id: uuid.UUID | None) -> Decimal:
+    async def outstanding_purchase_due(self, branch_ids: Sequence[uuid.UUID] | None) -> Decimal:
         """Everything still owed to suppliers on received purchases (all time)."""
         stmt = select(func.coalesce(func.sum(Purchase.due), 0)).where(
-            *self._purchase_conditions(None, None, branch_id)
+            *self._purchase_conditions(None, None, branch_ids)
         )
         return Decimal((await self.session.execute(stmt)).scalar_one())
 
     async def purchases_by_supplier(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> Sequence[Row[Any]]:
         stmt = (
             select(
@@ -288,14 +295,14 @@ class ReportRepository(BaseRepository[Sale]):
             )
             .select_from(Purchase)
             .join(Supplier, Supplier.id == Purchase.supplier_id)
-            .where(*self._purchase_conditions(start, end, branch_id))
+            .where(*self._purchase_conditions(start, end, branch_ids))
             .group_by(Purchase.supplier_id, Supplier.name)
             .order_by(func.sum(Purchase.total).desc())
         )
         return (await self.session.execute(stmt)).all()
 
     # --- Inventory ---------------------------------------------------------
-    async def inventory_valuation(self, branch_id: uuid.UUID | None) -> dict[str, Any]:
+    async def inventory_valuation(self, branch_ids: Sequence[uuid.UUID] | None) -> dict[str, Any]:
         stmt = (
             select(
                 func.coalesce(func.sum(StockLevel.quantity * Product.purchase_price), 0),
@@ -307,8 +314,8 @@ class ReportRepository(BaseRepository[Sale]):
             .join(Product, Product.id == StockLevel.product_id)
             .where(Product.deleted_at.is_(None))
         )
-        if branch_id is not None:
-            stmt = stmt.where(StockLevel.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(StockLevel.branch_id.in_(branch_ids))
         row = (await self.session.execute(stmt)).one()
         return {
             "stock_value_cost": Decimal(row[0]),
@@ -318,7 +325,7 @@ class ReportRepository(BaseRepository[Sale]):
         }
 
     async def stock_rows(
-        self, *, status: str, branch_id: uuid.UUID | None, limit: int
+        self, *, status: str, branch_ids: Sequence[uuid.UUID] | None, limit: int
     ) -> Sequence[Row[Any]]:
         if status == "out_of_stock":
             condition = StockLevel.quantity <= 0
@@ -341,12 +348,12 @@ class ReportRepository(BaseRepository[Sale]):
             .order_by(StockLevel.quantity.asc(), Product.name.asc())
             .limit(limit)
         )
-        if branch_id is not None:
-            stmt = stmt.where(StockLevel.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(StockLevel.branch_id.in_(branch_ids))
         return (await self.session.execute(stmt)).all()
 
     async def movements_by_type(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> Sequence[Row[Any]]:
         stmt = (
             select(
@@ -355,16 +362,16 @@ class ReportRepository(BaseRepository[Sale]):
                 func.coalesce(func.sum(StockMovement.quantity), 0),
             )
             .select_from(StockMovement)
-            .where(*self._movement_conditions(start, end, branch_id))
+            .where(*self._movement_conditions(start, end, branch_ids))
             .group_by(StockMovement.movement_type)
             .order_by(StockMovement.movement_type.asc())
         )
         return (await self.session.execute(stmt)).all()
 
     async def adjustments(
-        self, start: date, end: date, branch_id: uuid.UUID | None
+        self, start: date, end: date, branch_ids: Sequence[uuid.UUID] | None
     ) -> dict[str, Decimal | int]:
-        conditions = self._movement_conditions(start, end, branch_id)
+        conditions = self._movement_conditions(start, end, branch_ids)
         adjustment_amount = func.coalesce(
             func.sum(StockMovement.quantity).filter(
                 StockMovement.movement_type == "adjustment"

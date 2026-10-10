@@ -6,7 +6,9 @@ import { Calculator, Eye, ShieldAlert } from "lucide-react";
 
 import { PickedDateRange, SalesDateRange } from "@/app/(dashboard)/sales/sales-date-range";
 import { SessionDetailDialog } from "@/app/(dashboard)/cash-sessions/session-detail-dialog";
+import { useAuth } from "@/components/auth/auth-provider";
 import { useCan } from "@/components/auth/can";
+import { BranchFilter } from "@/components/branch/branch-filter";
 import { DataTable, type DataTableColumn } from "@/components/data-table/data-table";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
 import { SelectFilter } from "@/components/data-table/select-filter";
@@ -18,8 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/error-state";
 import { registerSessionsApi, type RegisterSession } from "@/lib/api/register-sessions";
-import { branchesApi } from "@/lib/api/rbac";
 import { businessApi } from "@/lib/api/settings";
+import { defaultBranchId } from "@/lib/auth/branches";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -38,19 +40,15 @@ function isoDay(value: PickedDateRange["start"] | undefined): string | undefined
 /** The register's shift history, expected vs counted, for oversight. */
 export function CashSessionsClient() {
   const canRead = useCan("registers:read");
+  const { user } = useAuth();
 
   const table = useDataTable();
   const [status, setStatus] = React.useState(ALL);
-  const [branch, setBranch] = React.useState(ALL);
+  const [branch, setBranch] = React.useState(() => defaultBranchId(user));
   const [range, setRange] = React.useState<PickedDateRange | null>(null);
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
   const businessQuery = useQuery({ queryKey: ["business"], queryFn: () => businessApi.get() });
-  const branchesQuery = useQuery({
-    queryKey: ["branches", "options"],
-    queryFn: () => branchesApi.options(),
-    enabled: canRead,
-  });
 
   const listQuery = useQuery({
     queryKey: ["register-sessions", { status, branch, page: table.page, from: isoDay(range?.start), to: isoDay(range?.end) }],
@@ -67,11 +65,6 @@ export function CashSessionsClient() {
 
   const sessions = listQuery.data?.items ?? [];
   const currency = businessQuery.data?.currency ?? "USD";
-
-  const branchOptions = [
-    { value: ALL, label: "All branches" },
-    ...(branchesQuery.data ?? []).map((row) => ({ value: row.id, label: row.name })),
-  ];
 
   const columns: DataTableColumn<RegisterSession>[] = [
     {
@@ -213,14 +206,12 @@ export function CashSessionsClient() {
               ariaLabel="Filter by status"
               className="sm:w-40"
             />
-            <SelectFilter
+            <BranchFilter
               value={branch}
               onValueChange={(value) => {
                 setBranch(value);
                 table.resetPage();
               }}
-              options={branchOptions}
-              ariaLabel="Filter by branch"
               className="sm:w-44"
             />
           </div>

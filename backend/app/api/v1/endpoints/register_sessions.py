@@ -8,8 +8,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, require_permissions
+from app.api.deps import BranchScopeDep, CurrentUser, Pagination, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
+from app.repositories.register import RegisterRepository
 from app.repositories.register_session import RegisterSessionRepository
 from app.schemas.common import Page
 from app.schemas.register_session import (
@@ -19,6 +20,7 @@ from app.schemas.register_session import (
     RegisterSessionOpen,
     RegisterSessionRead,
 )
+from app.services.branch_access import assert_branch_allowed, scoped_branch_ids
 from app.services.register_session import RegisterSessionService
 from app.utils.sorting import parse_sort
 
@@ -32,6 +34,7 @@ router = APIRouter(prefix="/register-sessions", tags=["register-sessions"])
 )
 async def list_register_sessions(
     session: SessionDep,
+    scope: BranchScopeDep,
     params: Pagination,
     register_id: Annotated[uuid.UUID | None, Query()] = None,
     branch_id: Annotated[uuid.UUID | None, Query()] = None,
@@ -46,7 +49,7 @@ async def list_register_sessions(
         params,
         sort=parse_sort(sort, RegisterSessionRepository.SORTABLE, default="-opened_at"),
         register_id=register_id,
-        branch_id=branch_id,
+        branch_ids=scoped_branch_ids(scope, branch_id),
         status=session_status,
         cashier_id=cashier_id,
         date_from=date_from,
@@ -68,10 +71,11 @@ async def list_register_sessions(
 )
 async def list_open_sessions(
     session: SessionDep,
+    scope: BranchScopeDep,
     branch_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> list[RegisterSessionRead]:
     service = RegisterSessionService(session)
-    records = await service.list_open(branch_id=branch_id)
+    records = await service.list_open(branch_ids=scoped_branch_ids(scope, branch_id))
     return [service.read(record) for record in records]
 
 
@@ -83,8 +87,12 @@ async def list_open_sessions(
 )
 async def current_register_session(
     session: SessionDep,
+    scope: BranchScopeDep,
     register_id: Annotated[uuid.UUID, Query()],
 ) -> RegisterSessionDetail | None:
+    register = await RegisterRepository(session).get(register_id)
+    if register is not None:
+        assert_branch_allowed(scope, register.branch_id)
     service = RegisterSessionService(session)
     record = await service.current(register_id)
     if record is None:
@@ -100,8 +108,11 @@ async def current_register_session(
     dependencies=[Depends(require_permissions(PermissionCode.REGISTERS_OPERATE))],
 )
 async def open_register_session(
-    session: SessionDep, actor: CurrentUser, payload: RegisterSessionOpen
+    session: SessionDep, actor: CurrentUser, scope: BranchScopeDep, payload: RegisterSessionOpen
 ) -> RegisterSessionDetail:
+    register = await RegisterRepository(session).get(payload.register_id)
+    if register is not None:
+        assert_branch_allowed(scope, register.branch_id)
     service = RegisterSessionService(session)
     record = await service.open(payload, actor_id=actor.id)
     return await service.detail(record.id)
@@ -112,8 +123,12 @@ async def open_register_session(
     response_model=RegisterSessionDetail,
     dependencies=[Depends(require_permissions(PermissionCode.REGISTERS_READ))],
 )
-async def get_register_session(session: SessionDep, session_id: uuid.UUID) -> RegisterSessionDetail:
-    return await RegisterSessionService(session).detail(session_id)
+async def get_register_session(
+    session: SessionDep, scope: BranchScopeDep, session_id: uuid.UUID
+) -> RegisterSessionDetail:
+    service = RegisterSessionService(session)
+    assert_branch_allowed(scope, (await service.get_or_404(session_id)).branch_id)
+    return await service.detail(session_id)
 
 
 @router.post(
@@ -125,10 +140,12 @@ async def get_register_session(session: SessionDep, session_id: uuid.UUID) -> Re
 async def close_register_session(
     session: SessionDep,
     actor: CurrentUser,
+    scope: BranchScopeDep,
     session_id: uuid.UUID,
     payload: RegisterSessionClose,
 ) -> RegisterSessionDetail:
     service = RegisterSessionService(session)
+    assert_branch_allowed(scope, (await service.get_or_404(session_id)).branch_id)
     record = await service.close(session_id, payload, actor_id=actor.id)
     return RegisterSessionDetail(session=service.read(record), summary=service.summary(record))
 
@@ -142,10 +159,12 @@ async def close_register_session(
 async def cash_in(
     session: SessionDep,
     actor: CurrentUser,
+    scope: BranchScopeDep,
     session_id: uuid.UUID,
     payload: CashAdjustment,
 ) -> RegisterSessionDetail:
     service = RegisterSessionService(session)
+    assert_branch_allowed(scope, (await service.get_or_404(session_id)).branch_id)
     record = await service.adjust(
         session_id, payload, movement_type="cash_in", actor_id=actor.id
     )
@@ -161,10 +180,12 @@ async def cash_in(
 async def cash_out(
     session: SessionDep,
     actor: CurrentUser,
+    scope: BranchScopeDep,
     session_id: uuid.UUID,
     payload: CashAdjustment,
 ) -> RegisterSessionDetail:
     service = RegisterSessionService(session)
+    assert_branch_allowed(scope, (await service.get_or_404(session_id)).branch_id)
     record = await service.adjust(
         session_id, payload, movement_type="cash_out", actor_id=actor.id
     )

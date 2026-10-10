@@ -76,15 +76,15 @@ class DashboardService:
 
     # --- Snapshot ----------------------------------------------------------
     async def snapshot(
-        self, request: WindowRequest, *, branch_id: uuid.UUID | None = None
+        self, request: WindowRequest, *, branch_ids: Sequence[uuid.UUID] | None = None
     ) -> DashboardSnapshot:
         window = await self.resolve(request)
         today = await self._today()
 
-        today_totals = await self.reports.sales_totals(today, today, branch_id)
-        today_cost = await self.reports.sales_cost(today, today, branch_id)
+        today_totals = await self.reports.sales_totals(today, today, branch_ids)
+        today_cost = await self.reports.sales_cost(today, today, branch_ids)
         today_expenses = await self.expenses.sum_amount(
-            date_from=today, date_to=today, branch_id=branch_id
+            date_from=today, date_to=today, branch_ids=branch_ids
         )
 
         sales = money(Decimal(today_totals["net_sales"]))
@@ -93,23 +93,23 @@ class DashboardService:
 
         customers = await self.dashboard.customer_count()
         products = await self.dashboard.product_count()
-        stock = await self.stock_levels.summary(branch_id=branch_id)
+        stock = await self.stock_levels.summary(branch_ids=branch_ids)
         customer_due = await self.reports.customer_dues()
         supplier_due = await self.reports.supplier_dues()
 
-        daily = await self.reports.sales_daily(window.start, window.end, branch_id)
-        costs = await self.dashboard.daily_cost(window.start, window.end, branch_id)
-        expenses = await self.dashboard.daily_expenses(window.start, window.end, branch_id)
+        daily = await self.reports.sales_daily(window.start, window.end, branch_ids)
+        costs = await self.dashboard.daily_cost(window.start, window.end, branch_ids)
+        expenses = await self.dashboard.daily_expenses(window.start, window.end, branch_ids)
 
-        categories = await self.reports.sales_by_category(window.start, window.end, branch_id)
-        methods = await self.reports.sales_by_payment_method(window.start, window.end, branch_id)
+        categories = await self.reports.sales_by_category(window.start, window.end, branch_ids)
+        methods = await self.reports.sales_by_payment_method(window.start, window.end, branch_ids)
 
-        by_product = await self.reports.sales_by_product(window.start, window.end, branch_id)
-        recent_sales = await self.dashboard.recent_sales(branch_id, RECENT_LIMIT)
+        by_product = await self.reports.sales_by_product(window.start, window.end, branch_ids)
+        recent_sales = await self.dashboard.recent_sales(branch_ids, RECENT_LIMIT)
         low = await self.reports.stock_rows(
-            status="low_stock", branch_id=branch_id, limit=RECENT_LIMIT
+            status="low_stock", branch_ids=branch_ids, limit=RECENT_LIMIT
         )
-        recent_payments = await self.dashboard.recent_payments(branch_id, RECENT_LIMIT)
+        recent_payments = await self.dashboard.recent_payments(branch_ids, RECENT_LIMIT)
 
         return DashboardSnapshot(
             as_of=datetime.now(UTC),

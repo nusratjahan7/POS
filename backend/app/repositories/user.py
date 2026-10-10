@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 
 from sqlalchemy import Select, func, or_, select
 
+from app.models.branch import Branch
 from app.models.role import Role
 from app.models.user import User
 from app.repositories.base import BaseRepository
@@ -61,7 +62,7 @@ class UserRepository(BaseRepository[User]):
         *,
         search: str | None = None,
         is_active: bool | None = None,
-        branch_id: uuid.UUID | None = None,
+        branch_ids: Sequence[uuid.UUID] | None = None,
         role_id: uuid.UUID | None = None,
         include_deleted: bool = False,
     ) -> Select[Any]:
@@ -78,8 +79,14 @@ class UserRepository(BaseRepository[User]):
             )
         if is_active is not None:
             stmt = stmt.where(User.is_active.is_(is_active))
-        if branch_id is not None:
-            stmt = stmt.where(User.branch_id == branch_id)
+        if branch_ids is not None:
+            # Match a user by their primary branch or by any explicit assignment.
+            stmt = stmt.where(
+                or_(
+                    User.branch_id.in_(branch_ids),
+                    User.branches.any(Branch.id.in_(branch_ids)),
+                )
+            )
         if role_id is not None:
             stmt = stmt.where(User.roles.any(Role.id == role_id))
         return stmt

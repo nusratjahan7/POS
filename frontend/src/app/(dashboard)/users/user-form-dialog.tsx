@@ -76,6 +76,9 @@ export function UserFormDialog({
   const [roleIds, setRoleIds] = React.useState<string[]>(
     user ? user.roles.map((role) => role.id) : [],
   );
+  const [branchIds, setBranchIds] = React.useState<string[]>(
+    user ? user.branches.map((branch) => branch.id) : [],
+  );
   const [branchId, setBranchId] = React.useState<string>(user?.branch?.id ?? UNASSIGNED);
   const [isActive, setIsActive] = React.useState(user?.is_active ?? true);
   const [formError, setFormError] = React.useState<string | null>(null);
@@ -103,6 +106,7 @@ export function UserFormDialog({
       phone: values.phone.trim() || null,
       is_active: isActive,
       branch_id: branchId === UNASSIGNED ? null : branchId,
+      branch_ids: branchIds,
       role_ids: roleIds,
     };
 
@@ -181,7 +185,11 @@ export function UserFormDialog({
               <Input id="user-phone" autoComplete="off" placeholder="Optional" {...register("phone")} />
             </Field>
 
-            <Field label="Branch" htmlFor="user-branch">
+            <Field
+              label="Primary branch"
+              htmlFor="user-branch"
+              hint="The branch this account defaults to."
+            >
               <Select value={branchId} onValueChange={setBranchId}>
                 <SelectTrigger id="user-branch" className="w-full">
                   <SelectValue placeholder="Unassigned" />
@@ -196,6 +204,42 @@ export function UserFormDialog({
                 </SelectContent>
               </Select>
             </Field>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <p className="text-sm font-medium">Branch access</p>
+            <p className="text-muted-foreground text-xs">
+              The branches this account may view and act on. Leave empty to fall back to
+              the primary branch. An Administrator always has access to every branch.
+            </p>
+            <div className="grid gap-1.5 rounded-md border p-2 sm:grid-cols-2">
+              {branches.length === 0 ? (
+                <p className="text-muted-foreground p-2 text-sm">No branches are defined yet.</p>
+              ) : (
+                branches.map((branch) => (
+                  <label
+                    key={branch.id}
+                    className={cn(
+                      "hover:bg-accent/60 flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 transition-colors",
+                      isSubmitting && "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <Checkbox
+                      checked={branchIds.includes(branch.id)}
+                      disabled={isSubmitting}
+                      onCheckedChange={(state) =>
+                        setBranchIds((current) =>
+                          state === true
+                            ? [...current, branch.id]
+                            : current.filter((id) => id !== branch.id),
+                        )
+                      }
+                    />
+                    <span className="text-sm">{branch.name}</span>
+                  </label>
+                ))
+              )}
+            </div>
           </div>
 
           {isEdit ? null : (

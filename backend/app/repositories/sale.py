@@ -55,7 +55,7 @@ class SaleRepository(BaseRepository[Sale]):
         self,
         *,
         search: str | None = None,
-        branch_id: uuid.UUID | None = None,
+        branch_ids: Sequence[uuid.UUID] | None = None,
         customer_id: uuid.UUID | None = None,
         cashier_id: uuid.UUID | None = None,
         status: str | None = None,
@@ -67,8 +67,8 @@ class SaleRepository(BaseRepository[Sale]):
         if search:
             pattern = like_pattern(search)
             stmt = stmt.where(Sale.sale_number.ilike(pattern, escape="\\"))
-        if branch_id is not None:
-            stmt = stmt.where(Sale.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(Sale.branch_id.in_(branch_ids))
         if customer_id is not None:
             stmt = stmt.where(Sale.customer_id == customer_id)
         if cashier_id is not None:

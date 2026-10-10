@@ -67,8 +67,10 @@ class InventoryService:
     ) -> tuple[Sequence[StockMovement], int]:
         return await self.movements.list_movements(params, sort=sort, **filters)
 
-    async def summary(self, *, branch_id: uuid.UUID | None = None) -> dict[str, int | Decimal]:
-        return await self.levels.summary(branch_id=branch_id)
+    async def summary(
+        self, *, branch_ids: Sequence[uuid.UUID] | None = None
+    ) -> dict[str, int | Decimal]:
+        return await self.levels.summary(branch_ids=branch_ids)
 
     async def get_level(self, product_id: uuid.UUID, branch_id: uuid.UUID) -> StockLevel | None:
         stmt = select(StockLevel).where(
@@ -176,7 +178,13 @@ class InventoryService:
         await self.session.flush()
 
         # Alert stock-watchers if this movement pushed the product over a line.
-        await self._notify_stock_level(product=product, previous=previous, new=new, user_id=user_id)
+        await self._notify_stock_level(
+            product=product,
+            previous=previous,
+            new=new,
+            user_id=user_id,
+            branch_id=branch_id,
+        )
         return movement
 
     async def _notify_stock_level(
@@ -186,6 +194,7 @@ class InventoryService:
         previous: Decimal,
         new: Decimal,
         user_id: uuid.UUID | None,
+        branch_id: uuid.UUID,
     ) -> None:
         """Notify when a movement crosses the low / out-of-stock threshold.
 
@@ -204,6 +213,7 @@ class InventoryService:
         await NotificationService(self.session).push_to_permission(
             PermissionCode.INVENTORY_READ.value,
             exclude_user_id=user_id,
+            branch_id=branch_id,
             type=notification_type,
             severity=severity,
             title=f"{label}: {product.name}",

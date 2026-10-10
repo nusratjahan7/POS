@@ -8,7 +8,9 @@ import {
   StockAdjustmentDialog,
   type AdjustmentPreset,
 } from "@/app/(dashboard)/inventory/stock-adjustment-dialog";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Can, useCan } from "@/components/auth/can";
+import { BranchFilter } from "@/components/branch/branch-filter";
 import { DataTable, type DataTableColumn } from "@/components/data-table/data-table";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
 import { DataTableSearch } from "@/components/data-table/data-table-search";
@@ -22,6 +24,7 @@ import { categoriesApi } from "@/lib/api/catalog";
 import { inventoryApi, type StockLevel, type StockStatus } from "@/lib/api/inventory";
 import { productsApi } from "@/lib/api/products";
 import { branchesApi } from "@/lib/api/rbac";
+import { defaultBranchId } from "@/lib/auth/branches";
 import { formatDateTime, formatQuantity } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -56,8 +59,9 @@ export function StockTab() {
   const canReadBranches = useCan("branches:read");
   const queryClient = useQueryClient();
 
+  const { user } = useAuth();
   const table = useDataTable();
-  const [branchFilter, setBranchFilter] = React.useState(ALL);
+  const [branchFilter, setBranchFilter] = React.useState(() => defaultBranchId(user));
   const [categoryFilter, setCategoryFilter] = React.useState(ALL);
   const [status, setStatus] = React.useState(ALL);
   const [sort, setSort] = React.useState("product_name");
@@ -102,14 +106,6 @@ export function StockTab() {
   });
 
   const levels = stockQuery.data?.items ?? [];
-
-  const branchOptions = React.useMemo(
-    () => [
-      { value: ALL, label: "All branches" },
-      ...(branchesQuery.data ?? []).map((branch) => ({ value: branch.id, label: branch.name })),
-    ],
-    [branchesQuery.data],
-  );
 
   const categoryOptions = React.useMemo(
     () => [
@@ -287,14 +283,12 @@ export function StockTab() {
               ariaLabel="Search stock"
               className="col-span-2"
             />
-            <SelectFilter
+            <BranchFilter
               value={branchFilter}
               onValueChange={(value) => {
                 setBranchFilter(value);
                 table.resetPage();
               }}
-              options={branchOptions}
-              ariaLabel="Filter by branch"
               className="sm:w-48"
             />
             <SelectFilter

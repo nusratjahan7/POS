@@ -18,6 +18,7 @@ from app.core.security import TokenType, decode_token
 from app.db.session import get_session
 from app.models.user import User
 from app.repositories.user import UserRepository
+from app.services.branch_access import BranchScope, resolve_branch_scope
 from app.utils.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, PageParams
 
 # --- Database --------------------------------------------------------------
@@ -60,6 +61,15 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+# --- Branch authorization --------------------------------------------------
+async def get_branch_scope(session: SessionDep, user: CurrentUser) -> BranchScope:
+    """The branches the caller may read and act on, resolved once per request."""
+    return await resolve_branch_scope(session, user)
+
+
+BranchScopeDep = Annotated[BranchScope, Depends(get_branch_scope)]
 
 
 # --- Authorization ---------------------------------------------------------

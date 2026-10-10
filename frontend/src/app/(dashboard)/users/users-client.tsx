@@ -221,7 +221,9 @@ export function UsersClient() {
                     </TableCell>
 
                     <TableCell className="text-muted-foreground text-sm">
-                      {user.branch?.name ?? "—"}
+                      {user.branches.length > 0
+                        ? user.branches.map((branch) => branch.name).join(", ")
+                        : (user.branch?.name ?? "—")}
                     </TableCell>
 
                     <TableCell>

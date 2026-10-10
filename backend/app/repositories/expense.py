@@ -28,7 +28,7 @@ class ExpenseRepository(BaseRepository[Expense]):
         stmt: Select[Any],
         *,
         search: str | None = None,
-        branch_id: uuid.UUID | None = None,
+        branch_ids: Sequence[uuid.UUID] | None = None,
         category_id: uuid.UUID | None = None,
         payment_method_id: uuid.UUID | None = None,
         date_from: date | None = None,
@@ -40,8 +40,8 @@ class ExpenseRepository(BaseRepository[Expense]):
                 Expense.description.ilike(pattern, escape="\\")
                 | Expense.reference.ilike(pattern, escape="\\")
             )
-        if branch_id is not None:
-            stmt = stmt.where(Expense.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(Expense.branch_id.in_(branch_ids))
         if category_id is not None:
             stmt = stmt.where(Expense.category_id == category_id)
         if payment_method_id is not None:

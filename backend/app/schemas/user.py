@@ -22,6 +22,8 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str
     role_ids: list[uuid.UUID] = Field(default_factory=list)
+    # Explicit branch assignments. Empty means "fall back to the primary branch".
+    branch_ids: list[uuid.UUID] = Field(default_factory=list)
     # Only honoured when the caller is a superuser (enforced in the service).
     is_superuser: bool = False
 
@@ -36,6 +38,7 @@ class UserUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=32)
     is_active: bool | None = None
     branch_id: uuid.UUID | None = None
+    branch_ids: list[uuid.UUID] | None = None
     role_ids: list[uuid.UUID] | None = None
 
 
@@ -58,6 +61,7 @@ class UserRead(ORMModel):
     last_login_at: datetime | None
     branch_id: uuid.UUID | None
     branch: BranchSummary | None
+    branches: list[BranchSummary]
     roles: list[RoleRead]
     created_at: datetime
     updated_at: datetime
@@ -73,6 +77,12 @@ class UserRead(ORMModel):
             codes.update(permission.code for permission in role.permissions)
         return sorted(codes)
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def all_branches(self) -> bool:
+        """Whether this account may read and act on every branch."""
+        return "*" in self.permissions or "branches:all" in self.permissions
+
 
 class UserSummary(ORMModel):
     id: uuid.UUID
@@ -83,5 +93,6 @@ class UserSummary(ORMModel):
     is_superuser: bool
     last_login_at: datetime | None
     branch: BranchSummary | None
+    branches: list[BranchSummary]
     roles: list[RoleSummary]
     created_at: datetime

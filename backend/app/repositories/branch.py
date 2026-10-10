@@ -67,6 +67,18 @@ class BranchRepository(BaseRepository[Branch]):
         stmt = select(Branch).where(Branch.deleted_at.is_(None)).order_by(Branch.name.asc())
         return (await self.session.execute(stmt)).scalars().all()
 
+    async def list_by_ids(self, branch_ids: Sequence[uuid.UUID]) -> Sequence[Branch]:
+        """Active branches within an explicit id set, ordered by name."""
+        ids = list(branch_ids)
+        if not ids:
+            return []
+        stmt = (
+            select(Branch)
+            .where(Branch.deleted_at.is_(None), Branch.id.in_(ids))
+            .order_by(Branch.name.asc())
+        )
+        return (await self.session.execute(stmt)).scalars().all()
+
     async def count_users(self, branch_id: uuid.UUID) -> int:
         stmt = select(func.count(User.id)).where(
             User.branch_id == branch_id, User.deleted_at.is_(None)

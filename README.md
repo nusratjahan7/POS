@@ -119,8 +119,9 @@ npm run build
 | Expenses & Cash Register | ✅ |
 | Discounts & Coupons   | ✅     |
 | Reporting & Analytics | ✅     |
-| Notifications & Audit Logging | ✅ |
+| Notifications & Audit Logging | ✅     |
 | Barcode & Printing    | ✅     |
+| Multi-Branch Support  | ✅     |
 
 See `backend/README.md` and `frontend/README.md` for module-level detail.
 
@@ -146,6 +147,38 @@ never reach the table.
 
 - `GET /api/v1/audit-logs` — newest first, filterable by module/action/user/date.
 - Read at `/audit`. Guarded by `audit:read`.
+
+## Multi-branch support
+
+Branch scoping is enforced **server-side** on every branch-scoped endpoint
+(MODULE 22) — the frontend selectors only reflect it.
+
+- **`branches:all`** is the grant that means "every branch"; it ships on the
+  built-in Administrator role. Superusers bypass as everywhere. Managers do not
+  get it.
+- **Assignments.** `users.branch_id` stays the *primary/default* branch; a new
+  `user_branches` many-to-many holds explicit assignments. A user with no
+  assignment falls back to their primary branch, else the first active branch —
+  so a single-branch install behaves exactly as before.
+- **Reads** are *silently scoped*: a restricted user who omits `branch_id` sees
+  only their branches; an explicit out-of-scope `branch_id` is `403`
+  (`branch_forbidden`).
+- **Writes** are *asserted*: creating/updating a sale, purchase, expense, stock
+  movement, register or register session at a branch outside the scope is `403`.
+- **`GET /branches/options`** returns only the caller's branches (all for an
+  administrator), which is what every selector reads. `GET /branches` remains the
+  administration catalogue (`branches:read`/`branches:write`).
+- **`/auth/me`** carries `branches` and `all_branches`, so the client can build
+  selectors and defaults without a second call.
+- Product master data stays global; stock is per branch in `stock_levels`
+  (`(product_id, branch_id)`), unchanged — definitions and inventory were already
+  separate.
+
+Reusable UI: `components/branch/branch-filter.tsx` (offers only your branches;
+adds "All branches" only for the grant holder; renders nothing for a
+single-branch user) and `lib/auth/branches.ts` (`canSeeAllBranches`,
+`defaultBranchId`, `ALL_BRANCHES`). Users are managed with a branch-access
+checklist plus a primary-branch picker.
 
 ## Barcode & printing
 

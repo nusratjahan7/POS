@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, require_permissions
+from app.api.deps import BranchScopeDep, CurrentUser, Pagination, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
 from app.repositories.purchase import PurchaseRepository
 from app.schemas.common import Page
@@ -23,6 +23,7 @@ from app.schemas.purchase import (
     PurchaseSummary,
     PurchaseUpdate,
 )
+from app.services.branch_access import assert_branch_allowed, scoped_branch_ids
 from app.services.purchase import PurchaseService
 from app.utils.sorting import parse_sort
 
@@ -36,6 +37,7 @@ router = APIRouter(prefix="/purchases", tags=["purchases"])
 )
 async def list_purchases(
     session: SessionDep,
+    scope: BranchScopeDep,
     params: Pagination,
     search: Annotated[str | None, Query(max_length=32, description="Purchase number")] = None,
     supplier_id: Annotated[uuid.UUID | None, Query()] = None,
@@ -50,7 +52,7 @@ async def list_purchases(
         sort=parse_sort(sort, PurchaseRepository.SORTABLE, default="-created_at"),
         search=search,
         supplier_id=supplier_id,
-        branch_id=branch_id,
+        branch_ids=scoped_branch_ids(scope, branch_id),
         status=purchase_status,
         date_from=date_from,
         date_to=date_to,
@@ -70,8 +72,9 @@ async def list_purchases(
     dependencies=[Depends(require_permissions(PermissionCode.PURCHASES_CREATE))],
 )
 async def create_purchase(
-    session: SessionDep, actor: CurrentUser, payload: PurchaseCreate
+    session: SessionDep, actor: CurrentUser, scope: BranchScopeDep, payload: PurchaseCreate
 ) -> PurchaseRead:
+    assert_branch_allowed(scope, payload.branch_id)
     purchase = await PurchaseService(session).create(payload, actor_id=actor.id)
     return PurchaseRead.model_validate(purchase)
 
@@ -81,8 +84,12 @@ async def create_purchase(
     response_model=PurchaseRead,
     dependencies=[Depends(require_permissions(PermissionCode.PURCHASES_VIEW))],
 )
-async def get_purchase(session: SessionDep, purchase_id: uuid.UUID) -> PurchaseRead:
-    return PurchaseRead.model_validate(await PurchaseService(session).get_or_404(purchase_id))
+async def get_purchase(
+    session: SessionDep, scope: BranchScopeDep, purchase_id: uuid.UUID
+) -> PurchaseRead:
+    purchase = await PurchaseService(session).get_or_404(purchase_id)
+    assert_branch_allowed(scope, purchase.branch_id)
+    return PurchaseRead.model_validate(purchase)
 
 
 @router.patch(
@@ -91,9 +98,17 @@ async def get_purchase(session: SessionDep, purchase_id: uuid.UUID) -> PurchaseR
     dependencies=[Depends(require_permissions(PermissionCode.PURCHASES_UPDATE))],
 )
 async def update_purchase(
-    session: SessionDep, purchase_id: uuid.UUID, payload: PurchaseUpdate
+    session: SessionDep,
+    scope: BranchScopeDep,
+    purchase_id: uuid.UUID,
+    payload: PurchaseUpdate,
 ) -> PurchaseRead:
-    return PurchaseRead.model_validate(await PurchaseService(session).update(purchase_id, payload))
+    service = PurchaseService(session)
+    existing = await service.get_or_404(purchase_id)
+    assert_branch_allowed(scope, existing.branch_id)
+    if payload.branch_id is not None:
+        assert_branch_allowed(scope, payload.branch_id)
+    return PurchaseRead.model_validate(await service.update(purchase_id, payload))
 
 
 @router.post(
@@ -103,11 +118,12 @@ async def update_purchase(
     dependencies=[Depends(require_permissions(PermissionCode.PURCHASES_UPDATE))],
 )
 async def receive_purchase(
-    session: SessionDep, actor: CurrentUser, purchase_id: uuid.UUID
+    session: SessionDep, actor: CurrentUser, scope: BranchScopeDep, purchase_id: uuid.UUID
 ) -> PurchaseRead:
-    return PurchaseRead.model_validate(
-        await PurchaseService(session).receive(purchase_id, actor_id=actor.id)
-    )
+    service = PurchaseService(session)
+    purchase = await service.get_or_404(purchase_id)
+    assert_branch_allowed(scope, purchase.branch_id)
+    return PurchaseRead.model_validate(await service.receive(purchase_id, actor_id=actor.id))
 
 
 @router.post(
@@ -115,8 +131,13 @@ async def receive_purchase(
     response_model=PurchaseRead,
     dependencies=[Depends(require_permissions(PermissionCode.PURCHASES_UPDATE))],
 )
-async def cancel_purchase(session: SessionDep, purchase_id: uuid.UUID) -> PurchaseRead:
-    return PurchaseRead.model_validate(await PurchaseService(session).cancel(purchase_id))
+async def cancel_purchase(
+    session: SessionDep, scope: BranchScopeDep, purchase_id: uuid.UUID
+) -> PurchaseRead:
+    service = PurchaseService(session)
+    purchase = await service.get_or_404(purchase_id)
+    assert_branch_allowed(scope, purchase.branch_id)
+    return PurchaseRead.model_validate(await service.cancel(purchase_id))
 
 
 @router.delete(
@@ -124,5 +145,10 @@ async def cancel_purchase(session: SessionDep, purchase_id: uuid.UUID) -> Purcha
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_permissions(PermissionCode.PURCHASES_UPDATE))],
 )
-async def delete_purchase(session: SessionDep, purchase_id: uuid.UUID) -> None:
-    await PurchaseService(session).delete(purchase_id)
+async def delete_purchase(
+    session: SessionDep, scope: BranchScopeDep, purchase_id: uuid.UUID
+) -> None:
+    service = PurchaseService(session)
+    purchase = await service.get_or_404(purchase_id)
+    assert_branch_allowed(scope, purchase.branch_id)
+    await service.delete(purchase_id)

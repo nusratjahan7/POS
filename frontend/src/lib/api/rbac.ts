@@ -68,6 +68,8 @@ export type ManagedUser = {
   is_superuser: boolean;
   last_login_at: string | null;
   branch: BranchOption | null;
+  /** Explicit branch assignments. Empty means "fall back to the primary branch". */
+  branches: BranchOption[];
   roles: RoleSummary[];
   created_at: string;
 };
@@ -84,7 +86,10 @@ export type UserPayload = {
   phone?: string | null;
   password?: string;
   is_active?: boolean;
+  /** The primary / default branch. */
   branch_id?: string | null;
+  /** Explicit branch assignments. */
+  branch_ids?: string[];
   role_ids?: string[];
 };
 

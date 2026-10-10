@@ -29,7 +29,7 @@ class StockLevelRepository(BaseRepository[StockLevel]):
         self,
         *,
         search: str | None = None,
-        branch_id: uuid.UUID | None = None,
+        branch_ids: Sequence[uuid.UUID] | None = None,
         category_id: uuid.UUID | None = None,
         status: str | None = None,
     ) -> Select[Any]:
@@ -52,8 +52,8 @@ class StockLevelRepository(BaseRepository[StockLevel]):
                     Product.barcode.ilike(pattern, escape="\\"),
                 )
             )
-        if branch_id is not None:
-            stmt = stmt.where(StockLevel.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(StockLevel.branch_id.in_(branch_ids))
         if category_id is not None:
             stmt = stmt.where(Product.category_id == category_id)
 
@@ -93,7 +93,9 @@ class StockLevelRepository(BaseRepository[StockLevel]):
         rows = (await self.session.execute(stmt)).all()
         return {row.product_id: Decimal(row.quantity) for row in rows}
 
-    async def summary(self, *, branch_id: uuid.UUID | None = None) -> dict[str, int | Decimal]:
+    async def summary(
+        self, *, branch_ids: Sequence[uuid.UUID] | None = None
+    ) -> dict[str, int | Decimal]:
         stmt = (
             select(
                 func.count().label("total"),
@@ -107,8 +109,8 @@ class StockLevelRepository(BaseRepository[StockLevel]):
             .join(Product, Product.id == StockLevel.product_id)
             .where(Product.deleted_at.is_(None))
         )
-        if branch_id is not None:
-            stmt = stmt.where(StockLevel.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(StockLevel.branch_id.in_(branch_ids))
 
         row = (await self.session.execute(stmt)).one()
         total = int(row.total)

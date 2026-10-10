@@ -12,13 +12,26 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, require_permissions
+from app.api.deps import BranchScopeDep, CurrentUser, Pagination, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
 from app.schemas.common import Page
 from app.schemas.pos import PosCategory, PosProduct, PosStock
+from app.services.branch_access import BranchScope, assert_branch_allowed
 from app.services.pos import PosService
 
 router = APIRouter(prefix="/pos", tags=["pos"])
+
+
+def _fallback_branch(scope: BranchScope, primary: uuid.UUID | None) -> uuid.UUID | None:
+    """The branch the till defaults to when none is requested.
+
+    Prefer the cashier's own branch, but only if it is within their scope;
+    otherwise fall back to the first branch they are allowed to use, so a
+    branch-restricted cashier never lands on a till they cannot sell from.
+    """
+    if scope.all_branches or primary is None or scope.allows(primary):
+        return primary
+    return scope.allowed[0] if scope.allowed else primary
 
 
 @router.get(
@@ -30,6 +43,7 @@ router = APIRouter(prefix="/pos", tags=["pos"])
 async def pos_catalog(
     session: SessionDep,
     actor: CurrentUser,
+    scope: BranchScopeDep,
     params: Pagination,
     search: Annotated[str | None, Query(max_length=120, description="Name, SKU or barcode")] = None,
     sku: Annotated[str | None, Query(max_length=64, description="Exact SKU")] = None,
@@ -38,7 +52,10 @@ async def pos_catalog(
     branch_id: Annotated[uuid.UUID | None, Query(description="Defaults to your branch")] = None,
 ) -> Page[PosProduct]:
     service = PosService(session)
-    resolved_branch = await service.resolve_branch_id(branch_id, fallback=actor.branch_id)
+    resolved_branch = await service.resolve_branch_id(
+        branch_id, fallback=_fallback_branch(scope, actor.branch_id)
+    )
+    assert_branch_allowed(scope, resolved_branch)
     items, total = await service.catalog(
         params,
         branch_id=resolved_branch,
@@ -75,10 +92,14 @@ async def pos_categories(session: SessionDep) -> list[PosCategory]:
 async def pos_stock(
     session: SessionDep,
     actor: CurrentUser,
+    scope: BranchScopeDep,
     branch_id: Annotated[uuid.UUID | None, Query(description="Defaults to your branch")] = None,
     ids: Annotated[list[uuid.UUID] | None, Query(description="Repeat once per product")] = None,
 ) -> list[PosStock]:
     service = PosService(session)
-    resolved_branch = await service.resolve_branch_id(branch_id, fallback=actor.branch_id)
+    resolved_branch = await service.resolve_branch_id(
+        branch_id, fallback=_fallback_branch(scope, actor.branch_id)
+    )
+    assert_branch_allowed(scope, resolved_branch)
     rows = await service.stock_for(resolved_branch, ids or [])
     return [PosStock(**row) for row in rows]

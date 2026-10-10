@@ -8,7 +8,9 @@ import { toast } from "sonner";
 import { ExpenseCategoryDialog } from "@/app/(dashboard)/expenses/expense-category-dialog";
 import { ExpenseFormDialog } from "@/app/(dashboard)/expenses/expense-form-dialog";
 import { PickedDateRange, SalesDateRange } from "@/app/(dashboard)/sales/sales-date-range";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Can, useCan } from "@/components/auth/can";
+import { BranchFilter } from "@/components/branch/branch-filter";
 import { DataTable, type DataTableColumn } from "@/components/data-table/data-table";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
 import { DataTableSearch } from "@/components/data-table/data-table-search";
@@ -22,8 +24,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ErrorState } from "@/components/ui/error-state";
 import { describeError } from "@/lib/api/client";
 import { expenseCategoriesApi, expensesApi, type Expense } from "@/lib/api/expenses";
-import { branchesApi } from "@/lib/api/rbac";
 import { businessApi, paymentMethodsApi } from "@/lib/api/settings";
+import { defaultBranchId } from "@/lib/auth/branches";
 import { formatMoney } from "@/lib/format";
 
 const ALL = "all";
@@ -34,10 +36,11 @@ function isoDay(value: PickedDateRange["start"] | undefined): string | undefined
 
 export function ExpensesClient() {
   const canRead = useCan("expenses:read");
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const table = useDataTable();
-  const [branch, setBranch] = React.useState(ALL);
+  const [branch, setBranch] = React.useState(() => defaultBranchId(user));
   const [category, setCategory] = React.useState(ALL);
   const [method, setMethod] = React.useState(ALL);
   const [range, setRange] = React.useState<PickedDateRange | null>(null);
@@ -48,11 +51,6 @@ export function ExpensesClient() {
   const dateTo = isoDay(range?.end);
 
   const businessQuery = useQuery({ queryKey: ["business"], queryFn: () => businessApi.get() });
-  const branchesQuery = useQuery({
-    queryKey: ["branches", "options"],
-    queryFn: () => branchesApi.options(),
-    enabled: canRead,
-  });
   const categoriesQuery = useQuery({
     queryKey: ["expense-categories", "options"],
     queryFn: () => expenseCategoriesApi.options(),
@@ -246,14 +244,12 @@ export function ExpensesClient() {
               ariaLabel="Filter by payment method"
               className="sm:w-44"
             />
-            <SelectFilter
+            <BranchFilter
               value={branch}
               onValueChange={(value) => {
                 setBranch(value);
                 table.resetPage();
               }}
-              options={toOptions(branchesQuery.data ?? [])}
-              ariaLabel="Filter by branch"
               className="sm:w-44"
             />
           </div>

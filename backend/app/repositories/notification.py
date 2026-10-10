@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 from sqlalchemy import Select, func, or_, select, update
 
-from app.models.associations import role_permissions, user_roles
+from app.models.associations import role_permissions, user_branches, user_roles
 from app.models.notification import Notification
 from app.models.permission import Permission
 from app.models.user import User
@@ -70,12 +70,19 @@ class NotificationRepository(BaseRepository[Notification]):
 
     # --- Recipient resolution ---------------------------------------------
     async def recipients_with_permission(
-        self, code: str, *, exclude_user_id: uuid.UUID | None = None
+        self,
+        code: str,
+        *,
+        exclude_user_id: uuid.UUID | None = None,
+        branch_id: uuid.UUID | None = None,
     ) -> Sequence[uuid.UUID]:
         """Active users who hold *code* — or are superusers (they bypass checks).
 
         Users with no roles at all are still included when they are superusers,
-        hence the outer joins.
+        hence the outer joins. When *branch_id* is given, only users responsible
+        for that branch (assigned to it, or primarily at it) are returned — so a
+        low-stock alert reaches the people who can act on it, not the whole
+        company.
         """
         stmt = (
             select(User.id)
@@ -91,4 +98,15 @@ class NotificationRepository(BaseRepository[Notification]):
         )
         if exclude_user_id is not None:
             stmt = stmt.where(User.id != exclude_user_id)
+        if branch_id is not None:
+            stmt = stmt.where(
+                or_(
+                    User.branch_id == branch_id,
+                    User.id.in_(
+                        select(user_branches.c.user_id).where(
+                            user_branches.c.branch_id == branch_id
+                        )
+                    ),
+                )
+            )
         return list((await self.session.execute(stmt)).scalars().all())

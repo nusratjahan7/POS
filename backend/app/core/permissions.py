@@ -24,6 +24,7 @@ class PermissionCode(StrEnum):
     # Organisation
     BRANCHES_READ = "branches:read"
     BRANCHES_WRITE = "branches:write"
+    BRANCHES_ALL = "branches:all"
 
     # Store settings (the business entity, its registers and payment methods)
     BUSINESS_READ = "business:read"
@@ -106,6 +107,10 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.ROLES_WRITE, "Create and edit roles"),
     PermissionSpec(PermissionCode.BRANCHES_READ, "View branches"),
     PermissionSpec(PermissionCode.BRANCHES_WRITE, "Create and edit branches"),
+    PermissionSpec(
+        PermissionCode.BRANCHES_ALL,
+        "View and act on every branch (Administrator only)",
+    ),
     PermissionSpec(PermissionCode.BUSINESS_READ, "View the business profile and tax settings"),
     PermissionSpec(PermissionCode.BUSINESS_WRITE, "Edit the business profile and tax settings"),
     PermissionSpec(PermissionCode.REGISTERS_READ, "View registers"),

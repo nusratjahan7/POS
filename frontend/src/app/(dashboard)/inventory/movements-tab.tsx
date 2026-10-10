@@ -4,7 +4,8 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
 
-import { useCan } from "@/components/auth/can";
+import { useAuth } from "@/components/auth/auth-provider";
+import { BranchFilter } from "@/components/branch/branch-filter";
 import { DataTable, type DataTableColumn } from "@/components/data-table/data-table";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
 import { DataTableSearch } from "@/components/data-table/data-table-search";
@@ -13,7 +14,7 @@ import { useDataTable } from "@/components/data-table/use-data-table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { inventoryApi, type Movement, type MovementType } from "@/lib/api/inventory";
-import { branchesApi } from "@/lib/api/rbac";
+import { defaultBranchId } from "@/lib/auth/branches";
 import { formatDateTime, formatQuantity } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -39,16 +40,10 @@ const TYPE_OPTIONS = [
 ];
 
 export function MovementsTab() {
-  const canReadBranches = useCan("branches:read");
+  const { user } = useAuth();
   const table = useDataTable();
-  const [branchFilter, setBranchFilter] = React.useState(ALL);
+  const [branchFilter, setBranchFilter] = React.useState(() => defaultBranchId(user));
   const [typeFilter, setTypeFilter] = React.useState(ALL);
-
-  const branchesQuery = useQuery({
-    queryKey: ["branches", "options"],
-    queryFn: () => branchesApi.options(),
-    enabled: canReadBranches,
-  });
 
   const movementsQuery = useQuery({
     queryKey: ["inventory", "movements", { query: table.query, page: table.page, branchFilter, typeFilter }],
@@ -62,14 +57,6 @@ export function MovementsTab() {
   });
 
   const movements = movementsQuery.data?.items ?? [];
-
-  const branchOptions = React.useMemo(
-    () => [
-      { value: ALL, label: "All branches" },
-      ...(branchesQuery.data ?? []).map((branch) => ({ value: branch.id, label: branch.name })),
-    ],
-    [branchesQuery.data],
-  );
 
   const columns: DataTableColumn<Movement>[] = [
     {
@@ -185,14 +172,12 @@ export function MovementsTab() {
             ariaLabel="Filter by movement type"
             className="sm:w-48"
           />
-          <SelectFilter
+          <BranchFilter
             value={branchFilter}
             onValueChange={(value) => {
               setBranchFilter(value);
               table.resetPage();
             }}
-            options={branchOptions}
-            ariaLabel="Filter by branch"
             className="sm:w-48"
           />
         </div>

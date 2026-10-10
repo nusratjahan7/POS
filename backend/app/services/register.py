@@ -52,8 +52,10 @@ class RegisterService:
     ) -> tuple[Sequence[Register], int]:
         return await self.registers.list_registers(params, sort=sort, **filters)
 
-    async def list_all(self, *, branch_id: uuid.UUID | None = None) -> Sequence[Register]:
-        return await self.registers.list_all(branch_id=branch_id)
+    async def list_all(
+        self, *, branch_ids: Sequence[uuid.UUID] | None = None
+    ) -> Sequence[Register]:
+        return await self.registers.list_all(branch_ids=branch_ids)
 
     # --- Internals ---------------------------------------------------------
     async def _resolve_branch(self, branch_id: uuid.UUID) -> Branch:

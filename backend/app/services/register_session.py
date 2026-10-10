@@ -53,8 +53,10 @@ class RegisterSessionService:
         await self._register_or_404(register_id)
         return await self.sessions.get_open_for_register(register_id)
 
-    async def list_open(self, *, branch_id: uuid.UUID | None = None) -> Sequence[RegisterSession]:
-        return await self.sessions.list_open(branch_id=branch_id)
+    async def list_open(
+        self, *, branch_ids: Sequence[uuid.UUID] | None = None
+    ) -> Sequence[RegisterSession]:
+        return await self.sessions.list_open(branch_ids=branch_ids)
 
     async def list_sessions(
         self,

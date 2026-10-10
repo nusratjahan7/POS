@@ -1,14 +1,12 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-
-import type { PickedDateRange } from "@/app/(dashboard)/sales/sales-date-range";
-import { SalesDateRange } from "@/app/(dashboard)/sales/sales-date-range";
+import { PickedDateRange, SalesDateRange } from "@/app/(dashboard)/sales/sales-date-range";
+import { BranchFilter } from "@/components/branch/branch-filter";
 import { SelectFilter, type SelectFilterOption } from "@/components/data-table/select-filter";
-import { branchesApi } from "@/lib/api/rbac";
+import { ALL_BRANCHES } from "@/lib/auth/branches";
 import type { ReportPreset } from "@/lib/api/reports";
 
-export const ALL_BRANCHES = "all";
+export { ALL_BRANCHES };
 
 const PRESET_OPTIONS: SelectFilterOption[] = [
   { value: "today", label: "Today" },
@@ -35,16 +33,6 @@ export function ReportFilters({
   branchId: string;
   onBranchChange: (branchId: string) => void;
 }) {
-  const branchesQuery = useQuery({
-    queryKey: ["branches", "options"],
-    queryFn: () => branchesApi.options(),
-  });
-
-  const branchOptions: SelectFilterOption[] = [
-    { value: ALL_BRANCHES, label: "All branches" },
-    ...(branchesQuery.data ?? []).map((branch) => ({ value: branch.id, label: branch.name })),
-  ];
-
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
       <SelectFilter
@@ -55,13 +43,7 @@ export function ReportFilters({
         className="sm:w-44"
       />
       {preset === "custom" ? <SalesDateRange value={range} onChange={onRangeChange} /> : null}
-      <SelectFilter
-        value={branchId}
-        onValueChange={onBranchChange}
-        options={branchOptions}
-        ariaLabel="Filter by branch"
-        className="sm:w-52"
-      />
+      <BranchFilter value={branchId} onValueChange={onBranchChange} className="sm:w-52" />
     </div>
   );
 }

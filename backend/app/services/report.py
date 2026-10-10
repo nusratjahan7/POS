@@ -10,6 +10,7 @@ net profit — so no endpoint or client ever computes a business number.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, tzinfo
 from decimal import Decimal
 from typing import Any
@@ -79,18 +80,18 @@ class ReportService:
 
     # --- Reports -----------------------------------------------------------
     async def sales(
-        self, request: WindowRequest, *, branch_id: uuid.UUID | None = None
+        self, request: WindowRequest, *, branch_ids: Sequence[uuid.UUID] | None = None
     ) -> SalesReport:
         window = await self.resolve(request)
-        totals = await self.reports.sales_totals(window.start, window.end, branch_id)
-        items_sold = await self.reports.sales_items_sold(window.start, window.end, branch_id)
-        returns = await self.reports.returns_count(window.start, window.end, branch_id)
-        daily = await self.reports.sales_daily(window.start, window.end, branch_id)
-        by_product = await self.reports.sales_by_product(window.start, window.end, branch_id)
-        by_category = await self.reports.sales_by_category(window.start, window.end, branch_id)
-        by_cashier = await self.reports.sales_by_cashier(window.start, window.end, branch_id)
-        by_branch = await self.reports.sales_by_branch(window.start, window.end)
-        by_method = await self.reports.sales_by_payment_method(window.start, window.end, branch_id)
+        totals = await self.reports.sales_totals(window.start, window.end, branch_ids)
+        items_sold = await self.reports.sales_items_sold(window.start, window.end, branch_ids)
+        returns = await self.reports.returns_count(window.start, window.end, branch_ids)
+        daily = await self.reports.sales_daily(window.start, window.end, branch_ids)
+        by_product = await self.reports.sales_by_product(window.start, window.end, branch_ids)
+        by_category = await self.reports.sales_by_category(window.start, window.end, branch_ids)
+        by_cashier = await self.reports.sales_by_cashier(window.start, window.end, branch_ids)
+        by_branch = await self.reports.sales_by_branch(window.start, window.end, branch_ids)
+        by_method = await self.reports.sales_by_payment_method(window.start, window.end, branch_ids)
 
         order_count = int(totals["order_count"])
         net_sales = money(Decimal(totals["net_sales"]))
@@ -164,13 +165,13 @@ class ReportService:
         )
 
     async def purchases(
-        self, request: WindowRequest, *, branch_id: uuid.UUID | None = None
+        self, request: WindowRequest, *, branch_ids: Sequence[uuid.UUID] | None = None
     ) -> PurchaseReport:
         window = await self.resolve(request)
-        totals = await self.reports.purchases_totals(window.start, window.end, branch_id)
-        outstanding = await self.reports.outstanding_purchase_due(branch_id)
+        totals = await self.reports.purchases_totals(window.start, window.end, branch_ids)
+        outstanding = await self.reports.outstanding_purchase_due(branch_ids)
         by_supplier = await self.reports.purchases_by_supplier(
-            window.start, window.end, branch_id
+            window.start, window.end, branch_ids
         )
 
         return PurchaseReport(
@@ -194,19 +195,19 @@ class ReportService:
         )
 
     async def inventory(
-        self, request: WindowRequest, *, branch_id: uuid.UUID | None = None
+        self, request: WindowRequest, *, branch_ids: Sequence[uuid.UUID] | None = None
     ) -> InventoryReport:
         window = await self.resolve(request)
-        valuation = await self.reports.inventory_valuation(branch_id)
-        summary = await self.stock_levels.summary(branch_id=branch_id)
+        valuation = await self.reports.inventory_valuation(branch_ids)
+        summary = await self.stock_levels.summary(branch_ids=branch_ids)
         low = await self.reports.stock_rows(
-            status="low_stock", branch_id=branch_id, limit=STOCK_LIST_LIMIT
+            status="low_stock", branch_ids=branch_ids, limit=STOCK_LIST_LIMIT
         )
         out = await self.reports.stock_rows(
-            status="out_of_stock", branch_id=branch_id, limit=STOCK_LIST_LIMIT
+            status="out_of_stock", branch_ids=branch_ids, limit=STOCK_LIST_LIMIT
         )
-        movements = await self.reports.movements_by_type(window.start, window.end, branch_id)
-        adjustments = await self.reports.adjustments(window.start, window.end, branch_id)
+        movements = await self.reports.movements_by_type(window.start, window.end, branch_ids)
+        adjustments = await self.reports.adjustments(window.start, window.end, branch_ids)
 
         return InventoryReport(
             as_of=datetime.now(UTC),
@@ -239,13 +240,13 @@ class ReportService:
         )
 
     async def financial(
-        self, request: WindowRequest, *, branch_id: uuid.UUID | None = None
+        self, request: WindowRequest, *, branch_ids: Sequence[uuid.UUID] | None = None
     ) -> FinancialReport:
         window = await self.resolve(request)
-        totals = await self.reports.sales_totals(window.start, window.end, branch_id)
-        cost = await self.reports.sales_cost(window.start, window.end, branch_id)
+        totals = await self.reports.sales_totals(window.start, window.end, branch_ids)
+        cost = await self.reports.sales_cost(window.start, window.end, branch_ids)
         expenses = await self.expenses.sum_amount(
-            date_from=window.start, date_to=window.end, branch_id=branch_id
+            date_from=window.start, date_to=window.end, branch_ids=branch_ids
         )
         customer_due = await self.reports.customer_dues()
         supplier_due = await self.reports.supplier_dues()
@@ -270,19 +271,19 @@ class ReportService:
 
     # --- Export ------------------------------------------------------------
     async def export(
-        self, report: str, request: WindowRequest, *, branch_id: uuid.UUID | None = None
+        self, report: str, request: WindowRequest, *, branch_ids: Sequence[uuid.UUID] | None = None
     ) -> tuple[list[ReportSection], ReportRange]:
         """Build the exportable sections for a report, plus the window it covered."""
         if report == "sales":
-            sales = await self.sales(request, branch_id=branch_id)
+            sales = await self.sales(request, branch_ids=branch_ids)
             return self._sales_sections(sales), sales.range
         if report == "purchases":
-            purchases = await self.purchases(request, branch_id=branch_id)
+            purchases = await self.purchases(request, branch_ids=branch_ids)
             return self._purchase_sections(purchases), purchases.range
         if report == "inventory":
-            inventory = await self.inventory(request, branch_id=branch_id)
+            inventory = await self.inventory(request, branch_ids=branch_ids)
             return self._inventory_sections(inventory), inventory.range
-        financial = await self.financial(request, branch_id=branch_id)
+        financial = await self.financial(request, branch_ids=branch_ids)
         return self._financial_sections(financial), financial.range
 
     @staticmethod

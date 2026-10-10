@@ -7,11 +7,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, require_permissions
+from app.api.deps import BranchScopeDep, CurrentUser, Pagination, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
 from app.repositories.user import UserRepository
 from app.schemas.common import Message, Page
 from app.schemas.user import UserCreate, UserPasswordUpdate, UserRead, UserSummary, UserUpdate
+from app.services.branch_access import scoped_branch_ids
 from app.services.user import UserService
 from app.utils.sorting import parse_sort
 
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 )
 async def list_users(
     session: SessionDep,
+    scope: BranchScopeDep,
     params: Pagination,
     search: Annotated[str | None, Query(max_length=120)] = None,
     is_active: Annotated[bool | None, Query()] = None,
@@ -36,7 +38,7 @@ async def list_users(
         params,
         search=search,
         is_active=is_active,
-        branch_id=branch_id,
+        branch_ids=scoped_branch_ids(scope, branch_id),
         role_id=role_id,
         sort=parse_sort(sort, UserRepository.SORTABLE, default="-created_at"),
     )

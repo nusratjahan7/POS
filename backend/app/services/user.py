@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import anyio
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import audit
@@ -36,6 +37,7 @@ def _user_snapshot(user: User) -> dict[str, Any]:
         "is_active": user.is_active,
         "is_superuser": user.is_superuser,
         "branch_id": user.branch_id,
+        "branches": sorted(branch.name for branch in user.branches),
         "roles": sorted(role.name for role in user.roles),
     }
 
@@ -53,6 +55,11 @@ class UserService:
         user = await self.users.get(user_id)
         if user is None or user.is_deleted:
             raise NotFoundError("User not found.", code="user_not_found")
+        # ``Session.get`` can return an identity-mapped instance without running
+        # the selectin loader, leaving ``branches`` unloaded. Populate it so
+        # snapshots and the response never trigger a lazy load (illegal in async).
+        if "branches" in sa_inspect(user).unloaded:
+            await self.session.refresh(user, attribute_names=["branches"])
         return user
 
     async def list_users(
@@ -61,7 +68,7 @@ class UserService:
         *,
         search: str | None = None,
         is_active: bool | None = None,
-        branch_id: uuid.UUID | None = None,
+        branch_ids: Sequence[uuid.UUID] | None = None,
         role_id: uuid.UUID | None = None,
         sort: tuple[Any, bool] | None = None,
     ) -> tuple[Sequence[User], int]:
@@ -70,7 +77,7 @@ class UserService:
             sort=sort,
             search=search,
             is_active=is_active,
-            branch_id=branch_id,
+            branch_ids=branch_ids,
             role_id=role_id,
         )
 
@@ -92,6 +99,7 @@ class UserService:
         roles = await self._resolve_roles(payload.role_ids)
         self._assert_may_manage_administrator_role(actor, current=[], new=roles)
         branch = await self._resolve_branch(payload.branch_id)
+        branches = await self._resolve_branches(payload.branch_ids)
 
         user = User(
             email=email,
@@ -103,6 +111,7 @@ class UserService:
             branch=branch,
         )
         user.roles = list(roles)
+        user.branches = list(branches)
         await self.users.add(user)
         AuditLogService(self.session).record(
             action="users.user.create",
@@ -127,6 +136,9 @@ class UserService:
 
         if "branch_id" in provided:
             user.branch = await self._resolve_branch(payload.branch_id)
+
+        if "branch_ids" in provided and payload.branch_ids is not None:
+            user.branches = list(await self._resolve_branches(payload.branch_ids))
 
         if "role_ids" in provided and payload.role_ids is not None:
             new_roles = await self._resolve_roles(payload.role_ids)
@@ -269,3 +281,20 @@ class UserService:
                 details=[{"field": "branch_id", "message": "Unknown branch."}],
             )
         return branch
+
+    async def _resolve_branches(self, branch_ids: Sequence[uuid.UUID]) -> Sequence[Branch]:
+        """Validate branch assignments, preserving the caller's order."""
+        unique_ids = list(dict.fromkeys(branch_ids))
+        if not unique_ids:
+            return []
+        branches = await self.branches.list_by_ids(unique_ids)
+        if len(branches) != len(unique_ids):
+            found = {branch.id for branch in branches}
+            missing = [str(branch_id) for branch_id in unique_ids if branch_id not in found]
+            raise BadRequestError(
+                "One or more branches do not exist.",
+                code="invalid_branches",
+                details=[{"field": "branch_ids", "message": f"Unknown: {', '.join(missing)}"}],
+            )
+        by_id = {branch.id: branch for branch in branches}
+        return [by_id[branch_id] for branch_id in unique_ids]

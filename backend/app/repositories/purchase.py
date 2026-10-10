@@ -32,7 +32,7 @@ class PurchaseRepository(BaseRepository[Purchase]):
         *,
         search: str | None = None,
         supplier_id: uuid.UUID | None = None,
-        branch_id: uuid.UUID | None = None,
+        branch_ids: Sequence[uuid.UUID] | None = None,
         status: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
@@ -43,8 +43,8 @@ class PurchaseRepository(BaseRepository[Purchase]):
             stmt = stmt.where(Purchase.purchase_number.ilike(pattern, escape="\\"))
         if supplier_id is not None:
             stmt = stmt.where(Purchase.supplier_id == supplier_id)
-        if branch_id is not None:
-            stmt = stmt.where(Purchase.branch_id == branch_id)
+        if branch_ids is not None:
+            stmt = stmt.where(Purchase.branch_id.in_(branch_ids))
         if status is not None:
             stmt = stmt.where(Purchase.status == status)
         if date_from is not None:

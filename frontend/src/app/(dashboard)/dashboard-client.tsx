@@ -17,6 +17,7 @@ import {
 
 import { ALL_BRANCHES, ReportFilters } from "@/app/(dashboard)/reports/report-filters";
 import type { PickedDateRange } from "@/app/(dashboard)/sales/sales-date-range";
+import { useAuth } from "@/components/auth/auth-provider";
 import { useCan } from "@/components/auth/can";
 import { OrdersTrendChart } from "@/components/dashboard/orders-trend-chart";
 import { ProfitTrendChart } from "@/components/dashboard/profit-trend-chart";
@@ -47,6 +48,7 @@ import type {
   StockStatusRow,
 } from "@/lib/api/reports";
 import { businessApi } from "@/lib/api/settings";
+import { defaultBranchId } from "@/lib/auth/branches";
 import { formatDateTime, formatMoney, formatQuantity } from "@/lib/format";
 
 const PERIOD_LABEL: Record<ReportPreset, string> = {
@@ -79,10 +81,11 @@ function SectionHeading({ title, aside }: { title: React.ReactNode; aside?: Reac
 
 export function DashboardClient() {
   const canRead = useCan("dashboard:view");
+  const { user } = useAuth();
 
   const [preset, setPreset] = React.useState<ReportPreset>("this_week");
   const [range, setRange] = React.useState<PickedDateRange | null>(null);
-  const [branchId, setBranchId] = React.useState(ALL_BRANCHES);
+  const [branchId, setBranchId] = React.useState(() => defaultBranchId(user));
 
   const dateFrom = preset === "custom" ? isoDay(range?.start) : undefined;
   const dateTo = preset === "custom" ? isoDay(range?.end) : undefined;

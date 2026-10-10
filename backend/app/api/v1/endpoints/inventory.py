@@ -11,7 +11,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, require_permissions
+from app.api.deps import BranchScopeDep, CurrentUser, Pagination, SessionDep, require_permissions
 from app.core.permissions import PermissionCode
 from app.repositories.stock_level import StockLevelRepository
 from app.repositories.stock_movement import StockMovementRepository
@@ -24,6 +24,7 @@ from app.schemas.inventory import (
     ReferenceType,
     StockLevelRead,
 )
+from app.services.branch_access import assert_branch_allowed, scoped_branch_ids
 from app.services.inventory import InventoryService
 from app.utils.sorting import parse_sort
 
@@ -39,6 +40,7 @@ StockFilter = Literal["in_stock", "low_stock", "out_of_stock"]
 )
 async def list_stock(
     session: SessionDep,
+    scope: BranchScopeDep,
     params: Pagination,
     search: Annotated[str | None, Query(max_length=120, description="Name, SKU or barcode")] = None,
     branch_id: Annotated[uuid.UUID | None, Query()] = None,
@@ -52,7 +54,7 @@ async def list_stock(
         params,
         sort=parse_sort(sort, StockLevelRepository.SORTABLE, default="product_name"),
         search=search,
-        branch_id=branch_id,
+        branch_ids=scoped_branch_ids(scope, branch_id),
         category_id=category_id,
         status=stock_status,
     )
@@ -71,10 +73,13 @@ async def list_stock(
 )
 async def stock_summary(
     session: SessionDep,
+    scope: BranchScopeDep,
     branch_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> InventorySummary:
     """Counts that drive the low-stock and out-of-stock views."""
-    data = await InventoryService(session).summary(branch_id=branch_id)
+    data = await InventoryService(session).summary(
+        branch_ids=scoped_branch_ids(scope, branch_id)
+    )
     return InventorySummary.model_validate(data)
 
 
@@ -85,6 +90,7 @@ async def stock_summary(
 )
 async def list_movements(
     session: SessionDep,
+    scope: BranchScopeDep,
     params: Pagination,
     search: Annotated[str | None, Query(max_length=120, description="Name, SKU or barcode")] = None,
     product_id: Annotated[uuid.UUID | None, Query()] = None,
@@ -98,7 +104,7 @@ async def list_movements(
         sort=parse_sort(sort, StockMovementRepository.SORTABLE, default="-created_at"),
         search=search,
         product_id=product_id,
-        branch_id=branch_id,
+        branch_ids=scoped_branch_ids(scope, branch_id),
         movement_type=movement_type,
         reference_type=reference_type,
     )
@@ -118,8 +124,9 @@ async def list_movements(
     dependencies=[Depends(require_permissions(PermissionCode.INVENTORY_ADJUST))],
 )
 async def create_movement(
-    session: SessionDep, actor: CurrentUser, payload: MovementCreate
+    session: SessionDep, actor: CurrentUser, scope: BranchScopeDep, payload: MovementCreate
 ) -> MovementRead:
+    assert_branch_allowed(scope, payload.branch_id)
     movement = await InventoryService(session).record_movement(
         product_id=payload.product_id,
         branch_id=payload.branch_id,

@@ -8,9 +8,10 @@ import { toast } from "sonner";
 import type { PickedDateRange } from "@/app/(dashboard)/sales/sales-date-range";
 import { FinancialReportTab } from "@/app/(dashboard)/reports/financial-report";
 import { InventoryReportTab } from "@/app/(dashboard)/reports/inventory-report";
-import { ALL_BRANCHES, ReportFilters } from "@/app/(dashboard)/reports/report-filters";
+import { ReportFilters } from "@/app/(dashboard)/reports/report-filters";
 import { PurchasesReportTab } from "@/app/(dashboard)/reports/purchases-report";
 import { SalesReportTab } from "@/app/(dashboard)/reports/sales-report";
+import { useAuth } from "@/components/auth/auth-provider";
 import { useCan } from "@/components/auth/can";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/layout/page-header";
@@ -27,6 +28,7 @@ import {
   type ReportPreset,
 } from "@/lib/api/reports";
 import { businessApi } from "@/lib/api/settings";
+import { defaultBranchId, ALL_BRANCHES } from "@/lib/auth/branches";
 import { downloadBlob } from "@/lib/download";
 import { printHtmlDocument } from "@/lib/reports/print";
 
@@ -43,11 +45,12 @@ function isoDay(value: PickedDateRange["start"] | undefined): string | undefined
 
 export function ReportsClient() {
   const canRead = useCan("reports:view");
+  const { user } = useAuth();
 
   const [tab, setTab] = React.useState<ReportName>("sales");
   const [preset, setPreset] = React.useState<ReportPreset>("this_month");
   const [range, setRange] = React.useState<PickedDateRange | null>(null);
-  const [branchId, setBranchId] = React.useState(ALL_BRANCHES);
+  const [branchId, setBranchId] = React.useState(() => defaultBranchId(user));
   const [exporting, setExporting] = React.useState<"csv" | "xlsx" | "html" | null>(null);
 
   const businessQuery = useQuery({ queryKey: ["business"], queryFn: () => businessApi.get() });
