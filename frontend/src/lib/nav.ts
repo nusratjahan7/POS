@@ -46,7 +46,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { title: "Dashboard", href: "/", icon: LayoutDashboard, status: "available" },
+      { title: "Dashboard", href: "/", icon: LayoutDashboard, status: "available", permission: "dashboard:view" },
       { title: "Register", href: "/register", icon: ScanLine, status: "available", permission: "sales:create" },
       { title: "Sales", href: "/sales", icon: Receipt, status: "available", permission: "sales:read" },
       { title: "Products", href: "/products", icon: Package, status: "available", permission: "catalog:read" },

@@ -33,6 +33,7 @@ INVENTORY_MANAGER_PERMISSIONS = {
     "purchases:view",
     "purchases:create",
     "purchases:update",
+    "dashboard:view",
     "reports:view",
 }
 

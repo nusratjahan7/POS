@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     business,
     categories,
     customers,
+    dashboard,
     discounts,
     expenses,
     health,
@@ -50,6 +51,7 @@ api_router.include_router(sales.router)
 api_router.include_router(discounts.router)
 api_router.include_router(expenses.router)
 api_router.include_router(register_sessions.router)
+api_router.include_router(dashboard.router)
 api_router.include_router(reports.router)
 api_router.include_router(uploads.router)
 

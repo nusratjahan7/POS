@@ -8,11 +8,14 @@ export function ChartCard({
   title,
   description,
   className,
+  contentClassName,
   children,
 }: {
   title: string;
   description?: string;
   className?: string;
+  /** Override the plot height. Defaults to `h-72`. */
+  contentClassName?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -23,7 +26,7 @@ export function ChartCard({
           {description ? <CardDescription>{description}</CardDescription> : null}
         </div>
       </CardHeader>
-      <CardContent className={cn("h-72")}>{children}</CardContent>
+      <CardContent className={cn("h-72", contentClassName)}>{children}</CardContent>
     </Card>
   );
 }

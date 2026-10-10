@@ -69,6 +69,7 @@ class PermissionCode(StrEnum):
     CUSTOMERS_WRITE = "customers:write"
 
     # Insight
+    DASHBOARD_VIEW = "dashboard:view"
     REPORTS_VIEW = "reports:view"
 
     # Platform administration
@@ -105,9 +106,7 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.BUSINESS_WRITE, "Edit the business profile and tax settings"),
     PermissionSpec(PermissionCode.REGISTERS_READ, "View registers"),
     PermissionSpec(PermissionCode.REGISTERS_WRITE, "Create and edit registers"),
-    PermissionSpec(
-        PermissionCode.REGISTERS_OPERATE, "Open, close and adjust a register session"
-    ),
+    PermissionSpec(PermissionCode.REGISTERS_OPERATE, "Open, close and adjust a register session"),
     PermissionSpec(PermissionCode.PAYMENTS_READ, "View payment methods"),
     PermissionSpec(PermissionCode.PAYMENTS_WRITE, "Create and edit payment methods"),
     PermissionSpec(PermissionCode.EXPENSES_READ, "View expenses and cash register sessions"),
@@ -130,6 +129,7 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.DISCOUNTS_WRITE, "Create and edit discounts and coupons"),
     PermissionSpec(PermissionCode.CUSTOMERS_READ, "View customers"),
     PermissionSpec(PermissionCode.CUSTOMERS_WRITE, "Create and edit customers"),
+    PermissionSpec(PermissionCode.DASHBOARD_VIEW, "View the operational dashboard"),
     PermissionSpec(PermissionCode.REPORTS_VIEW, "View reports and analytics"),
     PermissionSpec(PermissionCode.SETTINGS_READ, "Access the organisation settings area"),
     PermissionSpec(PermissionCode.SETTINGS_MANAGE, "Manage organisation-wide settings"),
@@ -193,6 +193,7 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.DISCOUNTS_WRITE,
                 PermissionCode.CUSTOMERS_READ,
                 PermissionCode.CUSTOMERS_WRITE,
+                PermissionCode.DASHBOARD_VIEW,
                 PermissionCode.REPORTS_VIEW,
             }
         ),
@@ -211,6 +212,7 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.PURCHASES_VIEW,
                 PermissionCode.PURCHASES_CREATE,
                 PermissionCode.PURCHASES_UPDATE,
+                PermissionCode.DASHBOARD_VIEW,
                 PermissionCode.REPORTS_VIEW,
             }
         ),
@@ -230,6 +232,7 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.SALES_READ,
                 PermissionCode.CUSTOMERS_READ,
                 PermissionCode.CUSTOMERS_WRITE,
+                PermissionCode.DASHBOARD_VIEW,
             }
         ),
     ),
