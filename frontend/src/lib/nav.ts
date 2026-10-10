@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRight,
   BadgePercent,
   Banknote,
   BarChart3,
@@ -55,6 +56,7 @@ export const navGroups: NavGroup[] = [
       { title: "Categories", href: "/categories", icon: FolderTree, status: "available", permission: "catalog:read" },
       { title: "Brands", href: "/brands", icon: Tag, status: "available", permission: "catalog:read" },
       { title: "Inventory", href: "/inventory", icon: Boxes, status: "available", permission: "inventory:read" },
+      { title: "Transfers", href: "/transfers", icon: ArrowLeftRight, status: "available", permission: "transfers:read" },
       { title: "Suppliers", href: "/suppliers", icon: Truck, status: "available", permission: "suppliers:read" },
       { title: "Purchases", href: "/purchases", icon: ShoppingCart, status: "available", permission: "purchases:view" },
       { title: "Customers", href: "/customers", icon: Users, status: "available", permission: "customers:read" },

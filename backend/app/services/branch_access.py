@@ -107,3 +107,22 @@ def assert_branch_allowed(scope: BranchScope, branch_id: uuid.UUID | None) -> No
             code="branch_forbidden",
             details=[{"field": "branch_id", "message": "Not one of your branches."}],
         )
+
+
+def assert_any_branch_allowed(
+    scope: BranchScope, *branch_ids: uuid.UUID | None
+) -> None:
+    """Pass when the user may access *any* of the given branches.
+
+    Used by two-sided records (a stock transfer touches both a source and a
+    destination branch): a user who can see either side may read it.
+    """
+    if scope.all_branches:
+        return
+    if any(branch_id is not None and scope.allows(branch_id) for branch_id in branch_ids):
+        return
+    raise ForbiddenError(
+        "You do not have access to this transfer's branches.",
+        code="branch_forbidden",
+        details=[{"field": "branch_id", "message": "Neither branch is one of yours."}],
+    )

@@ -122,6 +122,7 @@ npm run build
 | Notifications & Audit Logging | ✅     |
 | Barcode & Printing    | ✅     |
 | Multi-Branch Support  | ✅     |
+| Stock Transfers       | ✅     |
 
 See `backend/README.md` and `frontend/README.md` for module-level detail.
 
@@ -147,6 +148,42 @@ never reach the table.
 
 - `GET /api/v1/audit-logs` — newest first, filterable by module/action/user/date.
 - Read at `/audit`. Guarded by `audit:read`.
+
+## Stock transfers
+
+Move stock between branches (MODULE 23) through an approval workflow:
+**Draft → Requested → Approved → Shipped → Received** (or **Cancelled** before it
+ships). Stock moves at exactly two steps, both through the one stock writer
+(`InventoryService`) so the movement ledger is always in step with the status:
+
+- **Ship** deducts the source branch (a `transfer_out` movement);
+- **Receive** adds to the destination branch (a `transfer_in` movement).
+
+Nothing is reserved or deducted at draft/requested/approved, so a transfer can
+never lose or invent stock, and cancelling before shipment leaves inventory
+untouched. Shipping more than the source holds is refused (`insufficient_stock`)
+and the whole transaction rolls back — status and stock both stay put. A line
+cannot be duplicated, the two branches must differ, and shipping/receiving out
+of order is rejected.
+
+- **API**: `POST /api/v1/transfers` (create; `submit: true` skips the draft),
+  `GET /transfers` (search, status, branch, date, sort), `GET /transfers/{id}`,
+  `PATCH /transfers/{id}` (draft only), and the actions
+  `POST /transfers/{id}/{request|approve|ship|receive|cancel}`.
+- **Permissions** (each step is its own grant): `transfers:read`,
+  `transfers:write` (create/edit/request/cancel), `transfers:approve`,
+  `transfers:ship`, `transfers:receive`. Held by Administrator, Manager and
+  Inventory Manager.
+- **Branch scope** (MODULE 22): a transfer is visible when **either** branch is
+  in your scope; you dispatch from a source branch you hold and receive into a
+  destination branch you hold. Out-of-scope is `403 branch_forbidden`.
+- **History**: every transition records the actor and timestamp on the document
+  (created / requested / approved / shipped / received / cancelled), and the
+  stock movements carry `reference_type=transfer` back to it.
+- Ships and receives notify the responsible branch (`transfer_shipped` /
+  `transfer_received`). The management screen (`/transfers`) has a status
+  stepper, item list, a history timeline, per-step action buttons and a
+  source-stock hint on the create form.
 
 ## Multi-branch support
 

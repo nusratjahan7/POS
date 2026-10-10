@@ -10,8 +10,17 @@ from pydantic import BaseModel, Field, computed_field, model_validator
 from app.schemas.branch import BranchSummary
 from app.schemas.common import ORMModel
 
-MovementType = Literal["opening", "stock_in", "stock_out", "adjustment", "damage"]
-ReferenceType = Literal["manual", "opening", "purchase", "sale"]
+MovementType = Literal[
+    "opening",
+    "stock_in",
+    "stock_out",
+    "adjustment",
+    "damage",
+    "return",
+    "transfer_out",
+    "transfer_in",
+]
+ReferenceType = Literal["manual", "opening", "purchase", "sale", "sale_return", "transfer"]
 
 Quantity = Annotated[Decimal, Field(max_digits=12, decimal_places=3)]
 
@@ -21,6 +30,9 @@ _REQUIRED_SIGN: dict[str, int] = {
     "stock_in": 1,
     "stock_out": -1,
     "damage": -1,
+    "return": 1,
+    "transfer_in": 1,
+    "transfer_out": -1,
 }
 
 

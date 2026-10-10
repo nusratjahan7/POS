@@ -27,6 +27,7 @@ from app.api.v1.endpoints import (
     roles,
     sales,
     suppliers,
+    transfers,
     uploads,
     users,
 )
@@ -45,6 +46,7 @@ api_router.include_router(categories.router)
 api_router.include_router(brands.router)
 api_router.include_router(products.router)
 api_router.include_router(inventory.router)
+api_router.include_router(transfers.router)
 api_router.include_router(suppliers.router)
 api_router.include_router(purchases.router)
 api_router.include_router(customers.router)

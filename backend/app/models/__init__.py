@@ -40,6 +40,7 @@ from app.models.sale_return import SaleReturn
 from app.models.sale_return_item import SaleReturnItem
 from app.models.stock_level import StockLevel
 from app.models.stock_movement import StockMovement
+from app.models.stock_transfer import StockTransfer, StockTransferLine
 from app.models.supplier import Supplier
 from app.models.supplier_payment import SupplierPayment
 from app.models.user import User
@@ -78,6 +79,8 @@ __all__ = [
     "SaleReturnItem",
     "StockLevel",
     "StockMovement",
+    "StockTransfer",
+    "StockTransferLine",
     "Supplier",
     "SupplierPayment",
     "User",

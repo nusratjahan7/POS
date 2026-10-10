@@ -20,8 +20,17 @@ if TYPE_CHECKING:
 QUANTITY = Numeric(12, 3)
 
 # Keep these tuples in lock-step with the CHECK constraints and the API Literals.
-MOVEMENT_TYPES = ("opening", "stock_in", "stock_out", "adjustment", "damage", "return")
-REFERENCE_TYPES = ("manual", "opening", "purchase", "sale", "sale_return")
+MOVEMENT_TYPES = (
+    "opening",
+    "stock_in",
+    "stock_out",
+    "adjustment",
+    "damage",
+    "return",
+    "transfer_out",
+    "transfer_in",
+)
+REFERENCE_TYPES = ("manual", "opening", "purchase", "sale", "sale_return", "transfer")
 
 _MOVEMENT_TYPES_SQL = ", ".join(f"'{value}'" for value in MOVEMENT_TYPES)
 _REFERENCE_TYPES_SQL = ", ".join(f"'{value}'" for value in REFERENCE_TYPES)

@@ -48,6 +48,13 @@ class PermissionCode(StrEnum):
     INVENTORY_READ = "inventory:read"
     INVENTORY_ADJUST = "inventory:adjust"
 
+    # Stock transfers between branches (each step is its own grant)
+    TRANSFERS_READ = "transfers:read"
+    TRANSFERS_WRITE = "transfers:write"
+    TRANSFERS_APPROVE = "transfers:approve"
+    TRANSFERS_SHIP = "transfers:ship"
+    TRANSFERS_RECEIVE = "transfers:receive"
+
     # Purchasing (suppliers and purchase orders)
     SUPPLIERS_READ = "suppliers:read"
     SUPPLIERS_WRITE = "suppliers:write"
@@ -124,7 +131,14 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.CATALOG_WRITE, "Create and edit products and categories"),
     PermissionSpec(PermissionCode.CATALOG_DELETE, "Delete products and categories"),
     PermissionSpec(PermissionCode.INVENTORY_READ, "View stock levels"),
-    PermissionSpec(PermissionCode.INVENTORY_ADJUST, "Adjust and transfer stock"),
+    PermissionSpec(PermissionCode.INVENTORY_ADJUST, "Adjust stock"),
+    PermissionSpec(PermissionCode.TRANSFERS_READ, "View stock transfers between branches"),
+    PermissionSpec(PermissionCode.TRANSFERS_WRITE, "Create, edit and cancel stock transfers"),
+    PermissionSpec(PermissionCode.TRANSFERS_APPROVE, "Approve stock transfers"),
+    PermissionSpec(PermissionCode.TRANSFERS_SHIP, "Ship stock transfers (decreases the source)"),
+    PermissionSpec(
+        PermissionCode.TRANSFERS_RECEIVE, "Receive stock transfers (increases the destination)"
+    ),
     PermissionSpec(PermissionCode.SUPPLIERS_READ, "View suppliers and their balances"),
     PermissionSpec(PermissionCode.SUPPLIERS_WRITE, "Create and edit suppliers"),
     PermissionSpec(PermissionCode.PURCHASES_VIEW, "View purchase orders and receipts"),
@@ -191,6 +205,11 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.CATALOG_WRITE,
                 PermissionCode.INVENTORY_READ,
                 PermissionCode.INVENTORY_ADJUST,
+                PermissionCode.TRANSFERS_READ,
+                PermissionCode.TRANSFERS_WRITE,
+                PermissionCode.TRANSFERS_APPROVE,
+                PermissionCode.TRANSFERS_SHIP,
+                PermissionCode.TRANSFERS_RECEIVE,
                 PermissionCode.SUPPLIERS_READ,
                 PermissionCode.SUPPLIERS_WRITE,
                 PermissionCode.PURCHASES_VIEW,
@@ -220,6 +239,11 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.CATALOG_READ,
                 PermissionCode.INVENTORY_READ,
                 PermissionCode.INVENTORY_ADJUST,
+                PermissionCode.TRANSFERS_READ,
+                PermissionCode.TRANSFERS_WRITE,
+                PermissionCode.TRANSFERS_APPROVE,
+                PermissionCode.TRANSFERS_SHIP,
+                PermissionCode.TRANSFERS_RECEIVE,
                 PermissionCode.SUPPLIERS_READ,
                 PermissionCode.SUPPLIERS_WRITE,
                 PermissionCode.PURCHASES_VIEW,
