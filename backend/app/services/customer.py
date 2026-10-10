@@ -17,6 +17,8 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, UnprocessableError
+from app.core.permissions import PermissionCode
+from app.core.request_context import current_user_id_ctx
 from app.models.customer import Customer
 from app.models.customer_payment import CustomerPayment
 from app.models.sale import Sale
@@ -26,6 +28,7 @@ from app.repositories.sale import SaleRepository
 from app.schemas.customer import CustomerCreate, CustomerPaymentCreate, CustomerUpdate
 from app.schemas.ledger import LedgerStatement
 from app.services.ledger import LedgerService
+from app.services.notification import NotificationService
 from app.utils.pagination import PageParams
 
 RECENT_LIMIT = 5
@@ -198,11 +201,24 @@ class CustomerService:
             raise UnprocessableError(
                 "A credit charge must be a positive amount.", code="invalid_credit_amount"
             )
-        await self.get_or_404(customer_id)
+        customer = await self.get_or_404(customer_id)
         await self.session.execute(
             update(Customer)
             .where(Customer.id == customer_id)
             .values(balance=Customer.balance + amount)
+        )
+        # Alert the floor that the customer's tab grew. Staged with the sale that
+        # caused it (this method never commits).
+        await NotificationService(self.session).push_to_permission(
+            PermissionCode.CUSTOMERS_READ.value,
+            exclude_user_id=current_user_id_ctx.get(),
+            type="customer_due",
+            severity="info",
+            title=f"{customer.name} owes {amount}",
+            body=f"A {amount} balance was added to their account.",
+            entity_type="customer",
+            entity_id=customer.id,
+            data={"customer_id": customer.id, "amount": amount},
         )
 
     async def reverse_credit(self, customer_id: uuid.UUID, amount: Decimal) -> None:

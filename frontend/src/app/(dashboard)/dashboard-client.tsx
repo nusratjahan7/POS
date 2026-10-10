@@ -39,7 +39,6 @@ import {
   dashboardApi,
   type RecentPaymentRow,
   type RecentSaleRow,
-  type TrendPoint,
 } from "@/lib/api/dashboard";
 import type {
   ProductSalesRow,

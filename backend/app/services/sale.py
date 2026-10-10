@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ConflictError, NotFoundError, UnprocessableError
+from app.core.permissions import PermissionCode
 from app.models.customer import Customer
 from app.models.register import Register
 from app.models.sale import Sale
@@ -38,9 +39,11 @@ from app.repositories.register import RegisterRepository
 from app.repositories.sale import SaleRepository
 from app.schemas.discount import DiscountLineInput
 from app.schemas.sale import SaleCreate, SalePaymentCreate
+from app.services.audit_log import AuditLogService
 from app.services.customer import CustomerService
 from app.services.discount import DiscountService
 from app.services.inventory import InventoryService
+from app.services.notification import NotificationService
 from app.services.register_session import RegisterSessionService
 from app.utils.money import ZERO, money
 from app.utils.pagination import PageParams
@@ -357,6 +360,35 @@ class SaleService:
                         customer_id=customer.id if customer is not None else None,
                     )
                 )
+
+            # Audit the completed sale and tell the floor about it, in the same
+            # transaction — the entry lands only if the sale does.
+            AuditLogService(self.session).record(
+                action="sales.sale.create",
+                module="sales",
+                entity="sale",
+                entity_id=sale.id,
+                user_id=actor_id,
+                new={
+                    "sale_number": sale.sale_number,
+                    "total": total,
+                    "paid": applied,
+                    "due": due,
+                    "status": sale.status,
+                    "customer_id": customer.id if customer is not None else None,
+                },
+            )
+            await NotificationService(self.session).push_to_permission(
+                PermissionCode.SALES_READ.value,
+                exclude_user_id=actor_id,
+                type="new_sale",
+                severity="info",
+                title=f"New sale {sale.sale_number}",
+                body=f"{money(total)} rung up at {branch.name}.",
+                entity_type="sale",
+                entity_id=sale.id,
+                data={"sale_number": sale.sale_number, "total": total},
+            )
 
             await self.session.commit()
         except Exception:

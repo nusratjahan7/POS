@@ -25,6 +25,7 @@ from app.core.exceptions import (
     NotFoundError,
     UnprocessableError,
 )
+from app.core.permissions import PermissionCode
 from app.models.branch import Branch
 from app.models.purchase import Purchase
 from app.models.purchase_item import PurchaseItem
@@ -35,7 +36,9 @@ from app.repositories.product import ProductRepository
 from app.repositories.purchase import PurchaseRepository
 from app.repositories.supplier import SupplierRepository
 from app.schemas.purchase import PurchaseCreate, PurchaseItemCreate, PurchaseUpdate
+from app.services.audit_log import AuditLogService
 from app.services.inventory import InventoryService
+from app.services.notification import NotificationService
 from app.utils.pagination import PageParams
 
 CENT = Decimal("0.01")
@@ -290,6 +293,38 @@ class PurchaseService:
         purchase.status = "received"
         purchase.received_at = datetime.now(UTC)
 
+        AuditLogService(self.session).record(
+            action="purchases.receive",
+            module="purchases",
+            entity="purchase",
+            entity_id=purchase.id,
+            user_id=actor_id,
+            old={"status": "draft_or_pending"},
+            new={
+                "status": "received",
+                "purchase_number": purchase.purchase_number,
+                "total": purchase.total,
+                "due": purchase.due,
+            },
+        )
+        # Only a balance left owing grows the supplier's payable.
+        if purchase.due > 0:
+            await NotificationService(self.session).push_to_permission(
+                PermissionCode.SUPPLIERS_READ.value,
+                exclude_user_id=actor_id,
+                type="supplier_due",
+                severity="info",
+                title=f"Supplier balance grew by {purchase.due}",
+                body=f"Receiving {purchase.purchase_number} left {purchase.due} owed.",
+                entity_type="purchase",
+                entity_id=purchase.id,
+                data={
+                    "purchase_number": purchase.purchase_number,
+                    "supplier_id": purchase.supplier_id,
+                    "amount": purchase.due,
+                },
+            )
+
         await self.session.commit()
         return await self._reload(purchase.id)
 
@@ -300,8 +335,17 @@ class PurchaseService:
                 "Only draft or pending purchases can be cancelled.",
                 code="purchase_not_cancellable",
             )
+        previous_status = purchase.status
         purchase.status = "cancelled"
         purchase.cancelled_at = datetime.now(UTC)
+        AuditLogService(self.session).record(
+            action="purchases.cancel",
+            module="purchases",
+            entity="purchase",
+            entity_id=purchase.id,
+            old={"status": previous_status},
+            new={"status": "cancelled"},
+        )
         await self.session.commit()
         return await self._reload(purchase.id)
 

@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ConflictError, NotFoundError, UnprocessableError
+from app.core.permissions import PermissionCode
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.models.sale_return import SaleReturn
@@ -31,8 +32,10 @@ from app.repositories.register_session import RegisterSessionRepository
 from app.repositories.sale import SaleRepository
 from app.repositories.sale_return import SaleReturnRepository
 from app.schemas.sale_return import SaleReturnCreate
+from app.services.audit_log import AuditLogService
 from app.services.customer import CustomerService
 from app.services.inventory import InventoryService
+from app.services.notification import NotificationService
 from app.services.register_session import RegisterSessionService
 from app.services.sale import money
 
@@ -282,6 +285,33 @@ class SaleReturnService:
                 sale.refunded_by_id = actor_id
                 sale.refund_reason = record.reason
 
+            # Audit and announce the refund in the same transaction.
+            AuditLogService(self.session).record(
+                action="sales.refund.create",
+                module="sales",
+                entity="sale_return",
+                entity_id=record.id,
+                user_id=actor_id,
+                new={
+                    "return_number": record.return_number,
+                    "sale_number": sale.sale_number,
+                    "refund_amount": refund_total,
+                    "cash_refund": record.cash_refund,
+                    "credit_reversed": credit_reversed,
+                },
+            )
+            await NotificationService(self.session).push_to_permission(
+                PermissionCode.SALES_REFUND.value,
+                exclude_user_id=actor_id,
+                type="refund",
+                severity="warning",
+                title=f"Refund {record.return_number}",
+                body=f"{money(refund_total)} refunded on {sale.sale_number}.",
+                entity_type="sale_return",
+                entity_id=record.id,
+                data={"return_number": record.return_number, "refund_amount": refund_total},
+            )
+
             await self.session.commit()
         except Exception:
             await self.session.rollback()
@@ -305,8 +335,18 @@ class SaleReturnService:
                 "its stock and refund are already applied.",
                 code="return_not_cancellable",
             )
+        previous_status = record.status
         record.status = "cancelled"
         record.cancelled_at = datetime.now(UTC)
         record.cancelled_by_id = actor_id
+        AuditLogService(self.session).record(
+            action="sales.return.cancel",
+            module="sales",
+            entity="sale_return",
+            entity_id=record.id,
+            user_id=actor_id,
+            old={"status": previous_status},
+            new={"status": "cancelled"},
+        )
         await self.session.commit()
         return await self._reload(record.id)

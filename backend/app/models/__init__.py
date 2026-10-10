@@ -5,6 +5,7 @@ so keep every model imported here.
 """
 
 from app.models.associations import role_permissions, user_roles
+from app.models.audit_log import AuditLog
 from app.models.branch import Branch
 from app.models.brand import Brand
 from app.models.business import Business
@@ -21,6 +22,7 @@ from app.models.discount import (
 from app.models.discount_redemption import DiscountRedemption
 from app.models.expense import Expense
 from app.models.expense_category import ExpenseCategory
+from app.models.notification import Notification
 from app.models.password_reset import PasswordResetToken
 from app.models.payment_method import PaymentMethod
 from app.models.permission import Permission
@@ -43,6 +45,7 @@ from app.models.supplier_payment import SupplierPayment
 from app.models.user import User
 
 __all__ = [
+    "AuditLog",
     "Branch",
     "Brand",
     "Business",
@@ -57,6 +60,7 @@ __all__ = [
     "DiscountRedemption",
     "Expense",
     "ExpenseCategory",
+    "Notification",
     "PasswordResetToken",
     "PaymentMethod",
     "Permission",

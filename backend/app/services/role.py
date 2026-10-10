@@ -15,12 +15,14 @@ from app.core.exceptions import (
     ForbiddenError,
     NotFoundError,
 )
-from app.core.permissions import ADMINISTRATOR_ROLE_NAME
+from app.core.permissions import ADMINISTRATOR_ROLE_NAME, PermissionCode
 from app.models.permission import Permission
 from app.models.role import Role
 from app.repositories.permission import PermissionRepository
 from app.repositories.role import RoleRepository
 from app.schemas.role import RoleCreate, RoleUpdate
+from app.services.audit_log import AuditLogService
+from app.services.notification import NotificationService
 from app.utils.pagination import PageParams
 
 
@@ -69,11 +71,19 @@ class RoleService:
         )
         role.permissions = list(await self._resolve_permissions(payload.permission_codes))
         await self.roles.add(role)
+        AuditLogService(self.session).record(
+            action="rbac.role.create",
+            module="rbac",
+            entity="role",
+            entity_id=role.id,
+            new={"name": role.name, "permission_codes": sorted(role.permission_codes())},
+        )
         await self.session.commit()
         return role
 
     async def update(self, role_id: uuid.UUID, payload: RoleUpdate) -> Role:
         role = await self.get_or_404(role_id)
+        before = {"name": role.name, "permission_codes": sorted(role.permission_codes())}
         if role.name == ADMINISTRATOR_ROLE_NAME:
             raise ForbiddenError(
                 "The Administrator role cannot be changed.",
@@ -100,6 +110,27 @@ class RoleService:
         if payload.permission_codes is not None:
             role.permissions = list(await self._resolve_permissions(payload.permission_codes))
 
+        after = {"name": role.name, "permission_codes": sorted(role.permission_codes())}
+        AuditLogService(self.session).record(
+            action="rbac.role.update",
+            module="rbac",
+            entity="role",
+            entity_id=role.id,
+            old=before,
+            new=after,
+        )
+        if before["permission_codes"] != after["permission_codes"]:
+            await NotificationService(self.session).push_to_permission(
+                PermissionCode.SETTINGS_MANAGE.value,
+                type="system",
+                severity="info",
+                title=f"Role '{role.name}' permissions changed",
+                body="A role's permission set was updated.",
+                entity_type="role",
+                entity_id=role.id,
+                data={"role": role.name, "permission_codes": after["permission_codes"]},
+            )
+
         await self.session.commit()
         return role
 
@@ -113,6 +144,14 @@ class RoleService:
             raise ConflictError(f"This role is assigned to {assigned} user(s).", code="role_in_use")
 
         role.deleted_at = datetime.now(UTC)
+        AuditLogService(self.session).record(
+            action="rbac.role.delete",
+            module="rbac",
+            entity="role",
+            entity_id=role.id,
+            old={"name": role.name},
+            new={"deleted": True},
+        )
         await self.session.commit()
 
     # --- Internals ---------------------------------------------------------

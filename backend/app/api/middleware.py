@@ -10,7 +10,9 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
+from app.api.deps import client_ip
 from app.core.logging import new_request_id, request_id_ctx
+from app.core.request_context import reset_request_meta, set_request_meta
 
 logger = logging.getLogger("app.access")
 
@@ -30,6 +32,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         request_id = request.headers.get("x-request-id") or new_request_id()
         token = request_id_ctx.set(request_id)
+        meta = set_request_meta(
+            client_ip=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+        )
         started = time.perf_counter()
         try:
             response = await call_next(request)
@@ -39,6 +45,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 "%s %s failed after %.1fms", request.method, request.url.path, duration_ms
             )
             request_id_ctx.reset(token)
+            reset_request_meta(meta)
             raise
 
         duration_ms = (time.perf_counter() - started) * 1000
@@ -54,4 +61,5 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             duration_ms,
         )
         request_id_ctx.reset(token)
+        reset_request_meta(meta)
         return response

@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { CalculatorButton } from "@/components/calculator/calculator-button";
@@ -10,8 +10,7 @@ import { FullscreenToggle } from "@/components/layout/fullscreen-toggle";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UserMenu } from "@/components/layout/user-menu";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 function AppHeader() {
   return (
@@ -37,23 +36,7 @@ function AppHeader() {
         </button>
 
         <div className="ml-auto flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Notifications"
-                onClick={() =>
-                  toast.info("You're all caught up", {
-                    description: "Notifications arrive with the sales module.",
-                  })
-                }
-              >
-                <Bell className="size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Notifications</TooltipContent>
-          </Tooltip>
+          <NotificationBell />
 
           <CalculatorButton />
 

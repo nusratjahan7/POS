@@ -25,11 +25,38 @@ from app.repositories.brand import BrandRepository
 from app.repositories.category import CategoryRepository
 from app.repositories.product import ProductRepository
 from app.schemas.product import ProductCreate, ProductUpdate
+from app.services.audit_log import AuditLogService
 from app.services.inventory import InventoryService
 from app.utils.pagination import PageParams
 from app.utils.text import normalize_code, slugify
 
 SLUG_MAX_LENGTH = 200
+
+
+def _snapshot(product: Product) -> dict[str, Any]:
+    """The non-secret product fields worth recording in the audit log."""
+    return {
+        "name": product.name,
+        "sku": product.sku,
+        "barcode": product.barcode,
+        "category_id": product.category_id,
+        "brand_id": product.brand_id,
+        "unit": product.unit,
+        "purchase_price": product.purchase_price,
+        "selling_price": product.selling_price,
+        "discount_price": product.discount_price,
+        "minimum_stock": product.minimum_stock,
+        "is_active": product.is_active,
+    }
+
+
+def _prices(product: Product) -> dict[str, Any]:
+    """The price columns on their own, so a change is audited distinctly."""
+    return {
+        "purchase_price": product.purchase_price,
+        "selling_price": product.selling_price,
+        "discount_price": product.discount_price,
+    }
 
 
 class ProductService:
@@ -180,6 +207,14 @@ class ProductService:
             is_active=payload.is_active,
         )
         await self.products.add(product)
+        AuditLogService(self.session).record(
+            action="catalog.product.create",
+            module="catalog",
+            entity="product",
+            entity_id=product.id,
+            user_id=actor_id,
+            new=_snapshot(product),
+        )
 
         branch = await self._primary_branch()
         if branch is not None:
@@ -202,6 +237,8 @@ class ProductService:
 
     async def update(self, product_id: uuid.UUID, payload: ProductUpdate) -> Product:
         product = await self.get_or_404(product_id)
+        before = _snapshot(product)
+        before_prices = _prices(product)
         provided = payload.model_fields_set
 
         if payload.name is not None:
@@ -251,6 +288,26 @@ class ProductService:
         if payload.is_active is not None:
             product.is_active = payload.is_active
 
+        audit = AuditLogService(self.session)
+        audit.record(
+            action="catalog.product.update",
+            module="catalog",
+            entity="product",
+            entity_id=product.id,
+            old=before,
+            new=_snapshot(product),
+        )
+        after_prices = _prices(product)
+        if after_prices != before_prices:
+            audit.record(
+                action="catalog.product.price_change",
+                module="catalog",
+                entity="product",
+                entity_id=product.id,
+                old=before_prices,
+                new=after_prices,
+            )
+
         await self.session.commit()
         return await self._reload(product.id)
 
@@ -259,4 +316,12 @@ class ProductService:
         product = await self.get_or_404(product_id)
         product.is_active = False
         product.deleted_at = datetime.now(UTC)
+        AuditLogService(self.session).record(
+            action="catalog.product.delete",
+            module="catalog",
+            entity="product",
+            entity_id=product.id,
+            old=_snapshot(product),
+            new={"is_active": False},
+        )
         await self.session.commit()

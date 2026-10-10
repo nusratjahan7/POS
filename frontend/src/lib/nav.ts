@@ -2,6 +2,7 @@ import {
   BadgePercent,
   Banknote,
   BarChart3,
+  Bell,
   Boxes,
   Calculator,
   FolderTree,
@@ -10,6 +11,7 @@ import {
   Package,
   Receipt,
   ScanLine,
+  ScrollText,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -70,10 +72,17 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: "Personal",
+    items: [
+      { title: "Notifications", href: "/notifications", icon: Bell, status: "available", permission: "notifications:read" },
+    ],
+  },
+  {
     label: "Administration",
     items: [
       { title: "Users", href: "/users", icon: Users, status: "available", permission: "users:read" },
       { title: "Roles", href: "/roles", icon: ShieldCheck, status: "available", permission: "roles:read" },
+      { title: "Audit Log", href: "/audit", icon: ScrollText, status: "available", permission: "audit:read" },
       { title: "Settings", href: "/settings", icon: Settings, status: "available", permission: "settings:read" },
     ],
   },

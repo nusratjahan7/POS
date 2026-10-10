@@ -13,8 +13,22 @@ from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.models.payment_method import PaymentMethod
 from app.repositories.payment_method import PaymentMethodRepository
 from app.schemas.payment_method import PaymentMethodCreate, PaymentMethodUpdate
+from app.services.audit_log import AuditLogService
 from app.utils.pagination import PageParams
 from app.utils.text import normalize_code
+
+
+def _snapshot(method: PaymentMethod) -> dict[str, Any]:
+    """The editable payment-method fields, for the audit log."""
+    return {
+        "name": method.name,
+        "code": method.code,
+        "kind": method.kind,
+        "is_active": method.is_active,
+        "opens_cash_drawer": method.opens_cash_drawer,
+        "requires_reference": method.requires_reference,
+        "sort_order": method.sort_order,
+    }
 
 
 class PaymentMethodService:
@@ -75,11 +89,19 @@ class PaymentMethodService:
             sort_order=payload.sort_order,
         )
         await self.methods.add(method)
+        AuditLogService(self.session).record(
+            action="settings.payment_method.create",
+            module="settings",
+            entity="payment_method",
+            entity_id=method.id,
+            new=_snapshot(method),
+        )
         await self.session.commit()
         return method
 
     async def update(self, method_id: uuid.UUID, payload: PaymentMethodUpdate) -> PaymentMethod:
         method = await self.get_or_404(method_id)
+        before = _snapshot(method)
         provided = payload.model_fields_set
 
         if payload.code is not None:
@@ -113,6 +135,14 @@ class PaymentMethodService:
         if payload.sort_order is not None:
             method.sort_order = payload.sort_order
 
+        AuditLogService(self.session).record(
+            action="settings.payment_method.update",
+            module="settings",
+            entity="payment_method",
+            entity_id=method.id,
+            old=before,
+            new=_snapshot(method),
+        )
         await self.session.commit()
         return method
 
@@ -125,4 +155,12 @@ class PaymentMethodService:
             )
         method.is_active = False
         method.deleted_at = datetime.now(UTC)
+        AuditLogService(self.session).record(
+            action="settings.payment_method.delete",
+            module="settings",
+            entity="payment_method",
+            entity_id=method.id,
+            old=_snapshot(method),
+            new={"is_active": False},
+        )
         await self.session.commit()

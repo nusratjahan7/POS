@@ -119,5 +119,30 @@ npm run build
 | Expenses & Cash Register | ✅ |
 | Discounts & Coupons   | ✅     |
 | Reporting & Analytics | ✅     |
+| Notifications & Audit Logging | ✅ |
 
 See `backend/README.md` and `frontend/README.md` for module-level detail.
+
+## Notifications & audit log
+
+Two cross-cutting subsystems, both added in MODULE 20.
+
+**Notifications** are in-app and per-user: actions fan a row out to each recipient
+(audience resolved by permission, the actor excluded), so an unread count and read
+state are exact. Triggered by: low stock, out of stock, customer due, supplier due,
+new sale, refund, and important system events.
+
+- `GET /api/v1/notifications` — your notifications (`unread`, `type` filters).
+- `GET /api/v1/notifications/unread-count` — the bell's number.
+- `POST /api/v1/notifications/{id}/read` and `POST /api/v1/notifications/read-all`.
+- Surfaced in the header bell and at `/notifications`. Guarded by `notifications:read`.
+
+**Audit log** persists sensitive actions (sign-in, product create/update and price
+changes, stock adjustments, sale/refund creation, cancellation, user/permission/
+settings changes) with actor, action, module, entity, old/new JSON snapshots, IP and
+timestamp. Snapshots run through a deep redactor, so a password, hash or token can
+never reach the table.
+
+- `GET /api/v1/audit-logs` — newest first, filterable by module/action/user/date.
+- Read at `/audit`. Guarded by `audit:read`.
+

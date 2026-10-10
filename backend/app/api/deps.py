@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.exceptions import ForbiddenError, RateLimitError, TokenError, UnauthorizedError
 from app.core.rate_limit import parse_limit, rate_limiter
+from app.core.request_context import set_current_user
 from app.core.security import TokenType, decode_token
 from app.db.session import get_session
 from app.models.user import User
@@ -53,6 +54,8 @@ async def get_current_user(
     user = await UserRepository(session).get_usable(user_id)
     if user is None:
         raise UnauthorizedError("This account is not available.", code="account_unavailable")
+    # Make the actor available to the service layer for audit rows.
+    set_current_user(user.id)
     return user
 
 

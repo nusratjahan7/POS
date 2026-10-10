@@ -38,6 +38,7 @@ from app.models.user import User
 from app.repositories.password_reset import PasswordResetTokenRepository
 from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.user import UserRepository
+from app.services.audit_log import AuditLogService
 
 
 @lru_cache(maxsize=1)
@@ -86,12 +87,14 @@ class AuthService:
         user = await self.users.get_by_email(email)
         if user is None:
             await anyio.to_thread.run_sync(verify_password, password, _dummy_hash())
+            await self._record_login_failure(email=str(email), reason="unknown_email")
             raise InvalidCredentialsError()
 
         valid, new_hash = await anyio.to_thread.run_sync(
             verify_and_update_password, password, user.hashed_password
         )
         if not valid:
+            await self._record_login_failure(email=user.email, reason="invalid_password", user=user)
             raise InvalidCredentialsError()
         if new_hash is not None:
             user.hashed_password = new_hash
@@ -101,6 +104,7 @@ class AuthService:
 
         user.last_login_at = datetime.now(UTC)
         issued, _ = await self._issue(user, user_agent=user_agent, ip_address=ip_address)
+        AuditLogService(self.session).record(action="auth.login", module="auth", actor=user)
         await self.session.commit()
         return issued
 
@@ -141,6 +145,9 @@ class AuthService:
         record = await self.tokens.get_by_hash(hash_token(refresh_token))
         if record is not None and not record.is_revoked:
             record.revoked_at = datetime.now(UTC)
+            AuditLogService(self.session).record(
+                action="auth.logout", module="auth", user_id=record.user_id
+            )
             await self.session.commit()
 
     async def change_password(
@@ -164,6 +171,9 @@ class AuthService:
         user.hashed_password = await anyio.to_thread.run_sync(hash_password, new_password)
         # Every other session is invalidated as a security precaution.
         await self.tokens.revoke_all_for_user(user.id)
+        AuditLogService(self.session).record(
+            action="auth.password.change", module="auth", actor=user
+        )
         await self.session.commit()
         audit("password.changed", user_id=str(user.id))
 
@@ -259,11 +269,31 @@ class AuthService:
         await self.password_resets.invalidate_outstanding(user.id)
         # A reset is recovery from a possible compromise, so end every session.
         await self.tokens.revoke_all_for_user(user.id)
+        AuditLogService(self.session).record(
+            action="auth.password.reset", module="auth", actor=user
+        )
         await self.session.commit()
         audit("password.reset_token_used", user_id=str(user.id))
         return user
 
     # --- Internals ---------------------------------------------------------
+    async def _record_login_failure(
+        self, *, email: str, reason: str, user: User | None = None
+    ) -> None:
+        """Persist a failed sign-in.
+
+        The endpoint raises next, and the request-scoped session rolls back on an
+        unhandled error — so this entry must be committed on its own to survive.
+        """
+        AuditLogService(self.session).record(
+            action="auth.login_failed",
+            module="auth",
+            actor=user,
+            user_email=None if user is not None else email,
+            new={"reason": reason},
+        )
+        await self.session.commit()
+
     async def _issue(
         self,
         user: User,

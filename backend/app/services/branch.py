@@ -14,9 +14,21 @@ from app.models.branch import Branch
 from app.repositories.branch import BranchRepository
 from app.repositories.register import RegisterRepository
 from app.schemas.branch import BranchCreate, BranchUpdate
+from app.services.audit_log import AuditLogService
 from app.services.business import BusinessService
 from app.utils.pagination import PageParams
 from app.utils.text import normalize_code
+
+
+def _snapshot(branch: Branch) -> dict[str, Any]:
+    """The editable branch fields, for the audit log."""
+    return {
+        "name": branch.name,
+        "code": branch.code,
+        "address": branch.address,
+        "phone": branch.phone,
+        "is_active": branch.is_active,
+    }
 
 
 class BranchService:
@@ -78,11 +90,19 @@ class BranchService:
             business_id=await self._resolve_business_id(payload.business_id),
         )
         await self.branches.add(branch)
+        AuditLogService(self.session).record(
+            action="settings.branch.create",
+            module="settings",
+            entity="branch",
+            entity_id=branch.id,
+            new=_snapshot(branch),
+        )
         await self.session.commit()
         return branch
 
     async def update(self, branch_id: uuid.UUID, payload: BranchUpdate) -> Branch:
         branch = await self.get_or_404(branch_id)
+        before = _snapshot(branch)
         if payload.name is not None:
             branch.name = payload.name.strip()
         if "address" in payload.model_fields_set:
@@ -93,6 +113,14 @@ class BranchService:
             branch.is_active = payload.is_active
         if payload.business_id is not None:
             branch.business_id = await self._resolve_business_id(payload.business_id)
+        AuditLogService(self.session).record(
+            action="settings.branch.update",
+            module="settings",
+            entity="branch",
+            entity_id=branch.id,
+            old=before,
+            new=_snapshot(branch),
+        )
         await self.session.commit()
         return branch
 
@@ -112,4 +140,12 @@ class BranchService:
             )
         branch.is_active = False
         branch.deleted_at = datetime.now(UTC)
+        AuditLogService(self.session).record(
+            action="settings.branch.delete",
+            module="settings",
+            entity="branch",
+            entity_id=branch.id,
+            old=_snapshot(branch),
+            new={"is_active": False},
+        )
         await self.session.commit()

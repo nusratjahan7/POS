@@ -22,8 +22,22 @@ from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.role import RoleRepository
 from app.repositories.user import UserRepository
 from app.schemas.user import UserCreate, UserPasswordUpdate, UserUpdate
+from app.services.audit_log import AuditLogService
 from app.utils.pagination import PageParams
 from app.utils.text import normalize_email
+
+
+def _user_snapshot(user: User) -> dict[str, Any]:
+    """Non-secret account fields for the audit log — never the password hash."""
+    return {
+        "email": user.email,
+        "full_name": user.full_name,
+        "phone": user.phone,
+        "is_active": user.is_active,
+        "is_superuser": user.is_superuser,
+        "branch_id": user.branch_id,
+        "roles": sorted(role.name for role in user.roles),
+    }
 
 
 class UserService:
@@ -90,11 +104,20 @@ class UserService:
         )
         user.roles = list(roles)
         await self.users.add(user)
+        AuditLogService(self.session).record(
+            action="users.user.create",
+            module="users",
+            entity="user",
+            entity_id=user.id,
+            actor=actor,
+            new=_user_snapshot(user),
+        )
         await self.session.commit()
         return user
 
     async def update(self, user_id: uuid.UUID, payload: UserUpdate, *, actor: User) -> User:
         user = await self.get_or_404(user_id)
+        before = _user_snapshot(user)
         provided = payload.model_fields_set
 
         if payload.full_name is not None:
@@ -121,6 +144,15 @@ class UserService:
                 await self.tokens.revoke_all_for_user(user.id)
             user.is_active = payload.is_active
 
+        AuditLogService(self.session).record(
+            action="users.user.update",
+            module="users",
+            entity="user",
+            entity_id=user.id,
+            actor=actor,
+            old=before,
+            new=_user_snapshot(user),
+        )
         await self.session.commit()
         return user
 
@@ -152,6 +184,14 @@ class UserService:
         user.hashed_password = await anyio.to_thread.run_sync(hash_password, payload.password)
         # Force re-authentication everywhere after an administrative reset.
         await self.tokens.revoke_all_for_user(user.id)
+        AuditLogService(self.session).record(
+            action="users.password.reset",
+            module="users",
+            entity="user",
+            entity_id=user.id,
+            actor=actor,
+            new={"password_reset": True},
+        )
         await self.session.commit()
         audit("password.reset_by_admin", actor_id=str(actor.id), target_id=str(user.id))
 
@@ -166,6 +206,15 @@ class UserService:
         user.is_active = False
         user.deleted_at = datetime.now(UTC)
         await self.tokens.revoke_all_for_user(user.id)
+        AuditLogService(self.session).record(
+            action="users.user.deactivate",
+            module="users",
+            entity="user",
+            entity_id=user.id,
+            actor=actor,
+            old={"is_active": True},
+            new={"is_active": False},
+        )
         await self.session.commit()
 
     # --- Internals ---------------------------------------------------------

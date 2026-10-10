@@ -76,6 +76,10 @@ class PermissionCode(StrEnum):
     SETTINGS_READ = "settings:read"
     SETTINGS_MANAGE = "settings:manage"
 
+    # Notifications & audit
+    NOTIFICATIONS_READ = "notifications:read"
+    AUDIT_READ = "audit:read"
+
 
 @dataclass(frozen=True, slots=True)
 class PermissionSpec:
@@ -133,6 +137,8 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(PermissionCode.REPORTS_VIEW, "View reports and analytics"),
     PermissionSpec(PermissionCode.SETTINGS_READ, "Access the organisation settings area"),
     PermissionSpec(PermissionCode.SETTINGS_MANAGE, "Manage organisation-wide settings"),
+    PermissionSpec(PermissionCode.NOTIFICATIONS_READ, "View your own in-app notifications"),
+    PermissionSpec(PermissionCode.AUDIT_READ, "View the security audit log"),
 )
 
 ALL_PERMISSION_CODES: frozenset[str] = frozenset(spec.code.value for spec in PERMISSIONS)
@@ -195,6 +201,8 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.CUSTOMERS_WRITE,
                 PermissionCode.DASHBOARD_VIEW,
                 PermissionCode.REPORTS_VIEW,
+                PermissionCode.NOTIFICATIONS_READ,
+                PermissionCode.AUDIT_READ,
             }
         ),
     ),
@@ -214,6 +222,7 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.PURCHASES_UPDATE,
                 PermissionCode.DASHBOARD_VIEW,
                 PermissionCode.REPORTS_VIEW,
+                PermissionCode.NOTIFICATIONS_READ,
             }
         ),
     ),
@@ -233,6 +242,7 @@ DEFAULT_ROLES: tuple[RoleSpec, ...] = (
                 PermissionCode.CUSTOMERS_READ,
                 PermissionCode.CUSTOMERS_WRITE,
                 PermissionCode.DASHBOARD_VIEW,
+                PermissionCode.NOTIFICATIONS_READ,
             }
         ),
     ),

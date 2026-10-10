@@ -35,6 +35,7 @@ INVENTORY_MANAGER_PERMISSIONS = {
     "purchases:update",
     "dashboard:view",
     "reports:view",
+    "notifications:read",
 }
 
 

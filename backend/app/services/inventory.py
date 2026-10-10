@@ -27,6 +27,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, UnprocessableError
+from app.core.permissions import PermissionCode
 from app.models.product import Product
 from app.models.stock_level import StockLevel
 from app.models.stock_movement import StockMovement
@@ -34,6 +35,8 @@ from app.repositories.branch import BranchRepository
 from app.repositories.product import ProductRepository
 from app.repositories.stock_level import StockLevelRepository
 from app.repositories.stock_movement import StockMovementRepository
+from app.services.audit_log import AuditLogService
+from app.services.notification import NotificationService
 from app.utils.pagination import PageParams
 
 
@@ -171,7 +174,49 @@ class InventoryService:
         )
         self.session.add(movement)
         await self.session.flush()
+
+        # Alert stock-watchers if this movement pushed the product over a line.
+        await self._notify_stock_level(product=product, previous=previous, new=new, user_id=user_id)
         return movement
+
+    async def _notify_stock_level(
+        self,
+        *,
+        product: Product,
+        previous: Decimal,
+        new: Decimal,
+        user_id: uuid.UUID | None,
+    ) -> None:
+        """Notify when a movement crosses the low / out-of-stock threshold.
+
+        Guarded on the *crossing* (``previous`` vs ``new``), so a product that
+        merely sits low does not re-notify on every subsequent movement.
+        """
+        minimum = product.minimum_stock
+        if new <= 0 and previous > 0:
+            notification_type, severity = "out_of_stock", "critical"
+        elif new <= minimum and previous > minimum:
+            notification_type, severity = "low_stock", "warning"
+        else:
+            return
+
+        label = "Out of stock" if notification_type == "out_of_stock" else "Low stock"
+        await NotificationService(self.session).push_to_permission(
+            PermissionCode.INVENTORY_READ.value,
+            exclude_user_id=user_id,
+            type=notification_type,
+            severity=severity,
+            title=f"{label}: {product.name}",
+            body=f"{product.name} ({product.sku}) is down to {new}.",
+            entity_type="product",
+            entity_id=product.id,
+            data={
+                "product_name": product.name,
+                "sku": product.sku,
+                "quantity": new,
+                "minimum_stock": minimum,
+            },
+        )
 
     async def record_movement(
         self,
@@ -195,6 +240,15 @@ class InventoryService:
             reference_id=reference_id,
             user_id=user_id,
             note=note,
+        )
+        AuditLogService(self.session).record(
+            action="inventory.stock.adjust",
+            module="inventory",
+            entity="product",
+            entity_id=movement.product_id,
+            user_id=user_id,
+            old={"quantity": movement.previous_stock},
+            new={"quantity": movement.new_stock, "movement_type": movement.movement_type},
         )
         await self.session.commit()
         return await self._reload_movement(movement.id)

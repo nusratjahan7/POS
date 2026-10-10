@@ -15,7 +15,20 @@ from app.models.register import Register
 from app.repositories.branch import BranchRepository
 from app.repositories.register import RegisterRepository
 from app.schemas.register import RegisterCreate, RegisterUpdate
+from app.services.audit_log import AuditLogService
 from app.utils.pagination import PageParams
+
+
+def _snapshot(register: Register) -> dict[str, Any]:
+    """The editable register fields, for the audit log."""
+    return {
+        "name": register.name,
+        "branch_id": register.branch_id,
+        "is_active": register.is_active,
+        "default_opening_balance": register.default_opening_balance,
+        "require_opening_balance": register.require_opening_balance,
+        "allow_opening_balance_override": register.allow_opening_balance_override,
+    }
 
 
 class RegisterService:
@@ -82,11 +95,19 @@ class RegisterService:
             allow_opening_balance_override=payload.allow_opening_balance_override,
         )
         await self.registers.add(register)
+        AuditLogService(self.session).record(
+            action="settings.register.create",
+            module="settings",
+            entity="register",
+            entity_id=register.id,
+            new=_snapshot(register),
+        )
         await self.session.commit()
         return register
 
     async def update(self, register_id: uuid.UUID, payload: RegisterUpdate) -> Register:
         register = await self.get_or_404(register_id)
+        before = _snapshot(register)
 
         branch_changed = payload.branch_id is not None and payload.branch_id != register.branch_id
         target_branch_id = register.branch_id
@@ -112,6 +133,14 @@ class RegisterService:
         if payload.allow_opening_balance_override is not None:
             register.allow_opening_balance_override = payload.allow_opening_balance_override
 
+        AuditLogService(self.session).record(
+            action="settings.register.update",
+            module="settings",
+            entity="register",
+            entity_id=register.id,
+            old=before,
+            new=_snapshot(register),
+        )
         await self.session.commit()
         return register
 
@@ -119,4 +148,12 @@ class RegisterService:
         register = await self.get_or_404(register_id)
         register.is_active = False
         register.deleted_at = datetime.now(UTC)
+        AuditLogService(self.session).record(
+            action="settings.register.delete",
+            module="settings",
+            entity="register",
+            entity_id=register.id,
+            old=_snapshot(register),
+            new={"is_active": False},
+        )
         await self.session.commit()
